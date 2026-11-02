@@ -1,36 +1,84 @@
 # Folio
 
+**English** · [العربية](README.ar.md)
+
 *Every source, every note, one folio.*
 
-A local research workspace for students. Collect ideas, take reading notes, and think through your project with the AI model of your choice. **The AI never writes your paper.** It asks questions, explains, and gives feedback, but the writing is yours.
+Folio is a research workspace for students. Collect your sources, read and highlight them, take notes, keep your references, and think your project through with the AI model of your choice.
 
-Everything runs on your own computer and opens in your browser. Your work is saved as plain `.md` files you can open in any editor.
+**The AI never writes your paper.** It asks questions, explains, points you to the right page and gives feedback. The writing stays yours.
 
-## Quick start
+Folio runs on your own computer and opens in your browser. Your work is saved as plain files (`.md` notes, your PDFs, a `.bib` file) that you can open in any other app.
 
-You need [Node.js](https://nodejs.org) 20 or newer.
+## What it does
+
+- **Sources**: PDFs, Word files, Markdown and text files, web articles, YouTube videos (via their transcript) and pasted text, each with its own reading note beside it.
+- **Highlights**: colored highlights and figure captures in PDFs, copied into your notes with a link back to the page.
+- **Notes**: a clean markdown editor with a small toolbar.
+- **Chat**: ask about one source or all of them. Answers cite the exact passage and open the source at that page.
+- **Search** (`Ctrl/⌘ K`): full-text search across every source and note, offline.
+- **Summaries**: key claims, methods, limitations and open questions for each source.
+- **Knowledge base**: the AI's memory of your project, built from what you have read.
+- **Canvas**: drop ideas as cards, draw shapes and arrows, and let the AI sort and connect them.
+- **References**: add by DOI, BibTeX, RIS or title, cite in notes with `[@key]`, and export in any of 10,000+ citation styles (APA, MLA, Chicago, IEEE, Harvard…) or as BibTeX/RIS.
+- **Bring your own key**: OpenAI, Anthropic, OpenRouter or OpenCode Go. Keys stay on your computer.
+
+## Install
+
+You need two free tools: **Git** and **Node.js 20 or newer**.
+
+1. **Install Node.js**: download the LTS version from [nodejs.org](https://nodejs.org) and run the installer. On a Mac with Homebrew you can run `brew install node` instead.
+2. **Install Git**:
+   - macOS: open Terminal and run `xcode-select --install` (skip this if `git --version` already works).
+   - Windows: download it from [git-scm.com](https://git-scm.com/download/win) and keep the default options.
+   - Linux: use your package manager, for example `sudo apt install git`.
+3. **Download Folio and start it.** Open Terminal (macOS/Linux) or PowerShell (Windows) and run:
+
+   ```bash
+   git clone https://github.com/akamoe/research-platform.git
+   cd research-platform
+   npm ci
+   npm start
+   ```
+
+   The first start takes a minute. Folio then opens at <http://localhost:5174>. Keep the terminal window open while you use it; press `Ctrl+C` in it to stop Folio.
+
+4. **Add an AI model.** In Folio, open **Settings** and paste an API key for any of these:
+
+   | Provider | Where to get a key |
+   | --- | --- |
+   | OpenAI | [platform.openai.com/api-keys](https://platform.openai.com/api-keys) |
+   | Anthropic | [console.anthropic.com/settings/keys](https://console.anthropic.com/settings/keys) |
+   | OpenRouter | [openrouter.ai/keys](https://openrouter.ai/keys) |
+   | OpenCode Go | [opencode.ai](https://opencode.ai) (Go plan) |
+
+   Then pick a model in the chat. Each provider also has an editable base URL, for proxies or compatible endpoints. Everything except the AI features works without a key.
+
+### Start it again later
+
+Open a terminal in the folder and run:
 
 ```bash
-npm install
+cd research-platform
+npm run serve
+```
+
+`npm run serve` starts Folio without rebuilding it, so it is quicker. Open <http://localhost:5174> if the browser doesn't open by itself.
+
+### Update to the latest version
+
+```bash
+cd research-platform
+git pull origin main
+npm ci
 npm start
 ```
 
-This builds the app and opens <http://localhost:5174> in your browser. Next time, `npm run serve` starts it without rebuilding.
-
-Then open **Settings** and paste an API key for any of:
-
-| Provider | Where to get a key |
-| --- | --- |
-| OpenAI | platform.openai.com/api-keys |
-| Anthropic | console.anthropic.com/settings/keys |
-| OpenRouter | openrouter.ai/keys |
-| OpenCode Go | opencode.ai (Go plan) |
-
-Each provider also has an editable base URL, in case you use a proxy or a compatible endpoint.
+Use `npm ci`, not `npm install`: `npm install` can change `package-lock.json`, and then the next `git pull` refuses to run. If that has already happened, run `git checkout -- package-lock.json` once and pull again. Updating never touches your projects, which live in a separate folder.
 
 ## Where your files live
 
-By default everything is in `~/ResearchPlatform` (set `RP_DATA_DIR` to change it):
+By default everything is in `~/ResearchPlatform` (on Windows `C:\Users\<you>\ResearchPlatform`). Set `RP_DATA_DIR` to use another folder.
 
 ```
 ResearchPlatform/
@@ -46,10 +94,16 @@ ResearchPlatform/
     sources/             your PDFs and other sources, their text, a small record for each,
                          and your highlights (<id>.highlights.json, <id>-assets/*.png)
     chats/*.json         chat history
-  .trash/                deleted notes and projects, so nothing is lost
+  .trash/                deleted notes, sources and projects, so nothing is lost
 ```
 
-## Using it
+To back up your work, copy this folder.
+
+## Privacy
+
+Folio only listens on your own computer (`127.0.0.1`) and refuses requests from other websites. Your files never leave your machine, except the text you send to the AI provider you chose when you use an AI feature. DOI lookup, title search, web and YouTube sources and uncommon citation styles need the internet; everything else works offline.
+
+## Guide
 
 - **Projects**: one per paper or research question.
 - **Sources**: press **+** next to Sources in the sidebar to add a PDF, Word (.docx), Markdown or text file, a web article, a YouTube video (its transcript), a direct link to a PDF, or pasted text. You can also drop files onto the window. Each source opens on the left with its own note on the right (drag the divider to resize): PDFs in the PDF viewer, everything else in a clean reader, with the video player above a YouTube transcript (click a timestamp to play from there). Switch to **Chat** to ask about that source: the model reads its text, cites page numbers or timestamps, and the conversation is saved with it. **Summary** gives AI reading notes for the source (what it found, key claims with page links, methods, limitations, open questions); they are the source's page in the knowledge base, so chat reads the same notes. Web pages that need a login, or that load their text with scripts, can't be fetched; paste their text instead. Scanned PDFs without a text layer can be read but not chatted with yet.

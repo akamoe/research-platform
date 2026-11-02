@@ -38,9 +38,11 @@ export async function listSources(projectId: string): Promise<Source[]> {
   await fs.mkdir(dir, { recursive: true })
   const out: Source[] = []
   for (const f of await fs.readdir(dir)) {
-    if (!f.endsWith(".json")) continue
+    // <id>.json is the paper's metadata; <id>.highlights.json and friends are not.
+    if (!/^[\w-]+\.json$/.test(f) || f.includes(".highlights.")) continue
     try {
-      out.push(JSON.parse(await fs.readFile(path.join(dir, f), "utf8")))
+      const s = JSON.parse(await fs.readFile(path.join(dir, f), "utf8"))
+      if (s && typeof s === "object" && !Array.isArray(s) && s.id) out.push(s)
     } catch {}
   }
   return out.sort((a, b) => b.addedAt.localeCompare(a.addedAt))
@@ -119,13 +121,123 @@ export async function renameSource(projectId: string, sourceId: string, title: s
   return s
 }
 
-/** Moves the PDF and its record to the trash. The student's note stays in notes/. */
+/** Moves the PDF, its record and highlights to the trash. The student's note and captured images stay. */
 export async function deleteSource(projectId: string, sourceId: string) {
   await getSource(projectId, sourceId)
   const dest = path.join(TRASH_DIR, `${new Date().toISOString().replace(/[:.]/g, "-")}-${projectId}-paper-${sourceId}`)
   await fs.mkdir(dest, { recursive: true })
-  for (const ext of ["pdf", "json", "txt"] as const) {
-    const f = file(projectId, sourceId, ext)
-    if (await exists(f)) await fs.rename(f, path.join(dest, path.basename(f)))
+  const files = [
+    ...(["pdf", "json", "txt"] as const).map((ext) => file(projectId, sourceId, ext)),
+    path.join(sourcesDir(projectId), `${sourceId}.highlights.json`),
+  ]
+  for (const f of files) if (await exists(f)) await fs.rename(f, path.join(dest, path.basename(f)))
+  // Images stay where they are, so notes that embed them keep working.
+}
+
+// ---------- highlights ----------
+
+export interface PdfRect {
+  origin: { x: number; y: number }
+  size: { width: number; height: number }
+}
+
+/** A highlight on a paper. Coordinates are PDF points, so they don't depend on zoom. */
+export interface Highlight {
+  id: string
+  pageIndex: number
+  rects: PdfRect[]
+  color: string
+  /** Selected text, for text highlights. */
+  text?: string
+  /** File name in the paper's assets folder, for area (image) highlights. */
+  image?: string
+  createdAt: string
+}
+
+const COLORS = new Set(["yellow", "green", "blue", "red", "purple"])
+
+function highlightsFile(projectId: string, sourceId: string) {
+  if (!/^[\w-]+$/.test(sourceId)) throw new HttpError(400, "Invalid paper id")
+  return path.join(sourcesDir(projectId), `${sourceId}.highlights.json`)
+}
+
+export function assetsDir(projectId: string, sourceId: string) {
+  if (!/^[\w-]+$/.test(sourceId)) throw new HttpError(400, "Invalid paper id")
+  return path.join(sourcesDir(projectId), `${sourceId}-assets`)
+}
+
+export async function listHighlights(projectId: string, sourceId: string): Promise<Highlight[]> {
+  await getSource(projectId, sourceId)
+  try {
+    return JSON.parse(await fs.readFile(highlightsFile(projectId, sourceId), "utf8"))
+  } catch {
+    return []
+  }
+}
+
+async function saveHighlights(projectId: string, sourceId: string, list: Highlight[]) {
+  await fs.writeFile(highlightsFile(projectId, sourceId), JSON.stringify(list, null, 2))
+}
+
+function checkRects(rects: unknown): PdfRect[] {
+  if (!Array.isArray(rects) || rects.length === 0 || rects.length > 500) throw new HttpError(400, "Invalid highlight area")
+  return rects.map((r) => {
+    const x = Number(r?.origin?.x), y = Number(r?.origin?.y), w = Number(r?.size?.width), h = Number(r?.size?.height)
+    if (![x, y, w, h].every(Number.isFinite)) throw new HttpError(400, "Invalid highlight area")
+    return { origin: { x, y }, size: { width: w, height: h } }
+  })
+}
+
+export async function addHighlight(
+  projectId: string,
+  sourceId: string,
+  input: { pageIndex: number; rects: unknown; color: string; text?: string; image?: Uint8Array },
+): Promise<Highlight> {
+  const list = await listHighlights(projectId, sourceId)
+  if (!COLORS.has(input.color)) throw new HttpError(400, "Unknown color")
+  if (!Number.isInteger(input.pageIndex) || input.pageIndex < 0) throw new HttpError(400, "Invalid page")
+  const h: Highlight = {
+    id: crypto.randomUUID().slice(0, 8),
+    pageIndex: input.pageIndex,
+    rects: checkRects(input.rects),
+    color: input.color,
+    createdAt: new Date().toISOString(),
+  }
+  if (input.text) h.text = input.text.slice(0, 20000)
+  if (input.image) {
+    const dir = assetsDir(projectId, sourceId)
+    await fs.mkdir(dir, { recursive: true })
+    h.image = `${h.id}.png`
+    await fs.writeFile(path.join(dir, h.image), input.image)
+  }
+  list.push(h)
+  await saveHighlights(projectId, sourceId, list)
+  return h
+}
+
+export async function updateHighlight(projectId: string, sourceId: string, id: string, patch: { color?: string }) {
+  const list = await listHighlights(projectId, sourceId)
+  const h = list.find((x) => x.id === id)
+  if (!h) throw new HttpError(404, "Highlight not found")
+  if (patch.color !== undefined) {
+    if (!COLORS.has(patch.color)) throw new HttpError(400, "Unknown color")
+    h.color = patch.color
+  }
+  await saveHighlights(projectId, sourceId, list)
+  return h
+}
+
+/** Removes the highlight mark. Its image stays in the assets folder so notes that show it don't break. */
+export async function deleteHighlight(projectId: string, sourceId: string, id: string) {
+  const list = await listHighlights(projectId, sourceId)
+  await saveHighlights(projectId, sourceId, list.filter((x) => x.id !== id))
+}
+
+export async function readAsset(projectId: string, sourceId: string, file: string) {
+  if (!/^[\w-]+\.png$/.test(file)) throw new HttpError(400, "Invalid file")
+  try {
+    return await fs.readFile(path.join(assetsDir(projectId, sourceId), file))
+  } catch {
+    throw new HttpError(404, "Image not found")
   }
 }

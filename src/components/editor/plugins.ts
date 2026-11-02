@@ -34,6 +34,7 @@ import { LinkPlugin } from "@platejs/link/react"
 import { CodeBlockRules } from "@platejs/code-block"
 import { CodeBlockPlugin, CodeLinePlugin, CodeSyntaxPlugin } from "@platejs/code-block/react"
 import { MarkdownPlugin } from "@platejs/markdown"
+import { ImagePlugin } from "@platejs/media/react"
 import remarkGfm from "remark-gfm"
 import * as N from "./nodes"
 
@@ -74,6 +75,7 @@ export const editorPlugins = [
   CodeBlockPlugin.configure({ inputRules: [CodeBlockRules.markdown({ on: "match" })], node: { component: N.CodeBlockElement } }),
   CodeLinePlugin.withComponent(N.CodeLineElement),
   CodeSyntaxPlugin,
+  ImagePlugin.configure({ node: { component: N.ImageElement } }),
   IndentPlugin.configure({ inject: { targetPlugins: blockTargets }, options: { offset: 24 } }),
   ListPlugin.configure({
     inputRules: [

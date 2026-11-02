@@ -1,3 +1,4 @@
+import type React from "react"
 import type { TListElement } from "platejs"
 import { isOrderedList } from "@platejs/list"
 import { useTodoListElement, useTodoListElementState } from "@platejs/list/react"
@@ -48,15 +49,61 @@ export function HrElement(props: PlateElementProps) {
   )
 }
 
+/** Links like `#hl/<paperId>/<highlightId>` jump to a highlight in the open PDF. */
+export function gotoHighlight(target: string) {
+  const m = target.match(/^#?hl\/([\w-]+)\/([\w-]+)$/)
+  if (!m) return false
+  window.dispatchEvent(new CustomEvent("rp:goto-highlight", { detail: { sourceId: m[1], highlightId: m[2] } }))
+  return true
+}
+
 export function LinkElement(props: PlateElementProps) {
-  const url = (props.element as { url?: string }).url
+  const url = (props.element as { url?: string }).url ?? ""
+  const internal = url.startsWith("#hl/")
   return (
     <PlateElement
       as="a"
       {...props}
-      attributes={{ ...props.attributes, href: url, target: "_blank", rel: "noreferrer" }}
-      className="font-medium text-primary underline decoration-primary/40 underline-offset-4"
+      attributes={{
+        ...props.attributes,
+        href: url,
+        ...(internal ? {} : { target: "_blank", rel: "noreferrer" }),
+        onClick: (e: React.MouseEvent) => {
+          if (internal) {
+            e.preventDefault()
+            gotoHighlight(url)
+          } else if (e.metaKey || e.ctrlKey) {
+            window.open(url, "_blank", "noreferrer")
+          }
+        },
+        title: internal ? "Show in the PDF" : "Ctrl/⌘ click to open",
+      }}
+      className={
+        internal
+          ? "cursor-pointer rounded bg-muted px-1 py-0.5 font-sans text-xs font-medium text-muted-foreground no-underline hover:text-foreground"
+          : "font-medium text-primary underline decoration-primary/40 underline-offset-4"
+      }
     >
+      {props.children}
+    </PlateElement>
+  )
+}
+
+export function ImageElement(props: PlateElementProps) {
+  const { url, title, caption } = props.element as { url?: string; title?: string; caption?: { text: string }[] }
+  const alt = caption?.map((c) => c.text).join("") ?? ""
+  const jumps = typeof title === "string" && title.startsWith("hl/")
+  return (
+    <PlateElement {...props} className="my-3">
+      <div contentEditable={false} className="select-none">
+        <img
+          src={url}
+          alt={alt}
+          onClick={() => jumps && gotoHighlight(title!)}
+          title={jumps ? "Show in the PDF" : alt}
+          className={cn("max-h-[480px] max-w-full rounded-md border", jumps && "cursor-pointer hover:opacity-90")}
+        />
+      </div>
       {props.children}
     </PlateElement>
   )

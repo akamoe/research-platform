@@ -37,7 +37,8 @@ ResearchPlatform/
     project.json
     notes/*.md           your notes, as plain markdown
     knowledge/           the project's knowledge base (coming in step 2)
-    sources/             your PDFs, their extracted text, and a small record for each
+    sources/             your PDFs, their extracted text, a small record for each,
+                         and your highlights (<id>.highlights.json, <id>-assets/*.png)
     chats/*.json         chat history
   .trash/                deleted notes and projects, so nothing is lost
 ```
@@ -46,6 +47,7 @@ ResearchPlatform/
 
 - **Projects**: one per paper or research question.
 - **Papers**: add PDFs with the upload button in the sidebar, or drag them onto the window. Each paper opens with the PDF on the left and its own note on the right (drag the divider to resize). Switch to **Chat** to ask about that paper: the model reads its text, cites page numbers, and the conversation is saved with the paper. Scanned PDFs without a text layer can be read but not chatted with yet.
+- **Highlights**: select text in a PDF and pick a color. The highlight stays on the PDF and the quote drops into the paper's note with a small `p. N` link; click it to jump back to that spot. **Capture area** grabs a figure or table as an image into the note the same way. Click a highlight to recolor it, add it to the note again, or remove it. Highlights live in their own file; your PDF is never changed.
 - **Notes**: a markdown editor with no toolbars. Type `# ` for a heading, `- ` for a list, `> ` for a quote, `**bold**`, `==highlight==`. The `</>` button switches to the raw markdown.
 - **Chat** (`Ctrl/⌘ J`): pick any model from your connected providers. The assistant can see the note you have open (click the note chip to hide it). It follows one firm rule in every model: it won't write your paper.
 
@@ -62,5 +64,5 @@ Stack: Vite, React, TypeScript, Tailwind and [shadcn/ui](https://ui.shadcn.com) 
 
 1. **Foundation**: projects, markdown notes, API keys, model picker, mentor chat. *(done)*
 2. **Knowledge base and notes canvas**: a per-project wiki in the Open Knowledge Format, maintained on Karpathy's ingest / query / lint loop and used as the chat's memory; a canvas where you write freely and the AI quietly tags, links, and flags contradictions.
-3. **Library and citations**: PDF upload, side-by-side reading notes and per-paper chat are done. Still to come: add papers by DOI or BibTeX, search and chat across them (open-notebook's engine behind this UI), export citations in any CSL style or as BibTeX/RIS.
+3. **Library and citations**: PDF upload, side-by-side reading notes, colored highlights and figure captures, and per-paper chat are done. Still to come: add papers by DOI or BibTeX, search and chat across them (open-notebook's engine behind this UI), export citations in any CSL style or as BibTeX/RIS.
 4. **LaTeX editor**: write LaTeX with a live PDF preview compiled locally, wired to your library.

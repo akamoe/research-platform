@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { CodeIcon, ExternalLinkIcon, MessageSquareIcon, NotebookPenIcon } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -6,7 +6,8 @@ import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/componen
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { ChatPanel } from "@/components/chat/chat-panel"
-import { NoteEditor, SourceEditor } from "@/components/editor/note-editor"
+import { NoteEditor, SourceEditor, type NoteInserter } from "@/components/editor/note-editor"
+import { PdfAnnotator } from "./pdf-annotator"
 import { useNote } from "@/hooks/use-note"
 import { api, type PublicSettings, type Source } from "@/lib/api"
 import { cn } from "@/lib/utils"
@@ -30,6 +31,12 @@ export function PaperView({
   )
   const [title, setTitle] = useState(source.title)
   useEffect(() => localStorage.setItem("rp-paper-tab", tab), [tab])
+  const inserter = useRef<NoteInserter | null>(null)
+  const insert = useCallback((md: string) => {
+    setTab("note")
+    if (inserter.current) inserter.current.insertMarkdown(md)
+    else toast.error("Open the note to add highlights to it")
+  }, [])
 
   const rename = async () => {
     if (!title.trim() || title.trim() === source.title) return setTitle(source.title)
@@ -66,11 +73,7 @@ export function PaperView({
       </div>
       <ResizablePanelGroup orientation="horizontal" className="min-h-0 flex-1">
         <ResizablePanel defaultSize="55%" minSize="25%">
-          <iframe
-            title={source.title}
-            src={`${api.pdfUrl(projectId, source.id)}#view=FitH`}
-            className="size-full border-0 bg-muted"
-          />
+          <PdfAnnotator projectId={projectId} source={source} onInsert={insert} />
         </ResizablePanel>
         <ResizableHandle />
         <ResizablePanel defaultSize="45%" minSize="25%">
@@ -88,7 +91,7 @@ export function PaperView({
             </div>
             {/* Both stay mounted so a reply keeps streaming while you switch to the note. */}
             <div className={cn("min-h-0 flex-1", tab !== "note" && "hidden")}>
-              <PaperNote projectId={projectId} path={source.notePath} />
+              <PaperNote projectId={projectId} path={source.notePath} onReady={(i) => (inserter.current = i)} />
             </div>
             <div className={cn("min-h-0 flex-1", tab !== "chat" && "hidden")}>
               <ChatPanel
@@ -120,7 +123,15 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
   )
 }
 
-function PaperNote({ projectId, path }: { projectId: string; path: string }) {
+function PaperNote({
+  projectId,
+  path,
+  onReady,
+}: {
+  projectId: string
+  path: string
+  onReady: (i: NoteInserter | null) => void
+}) {
   const { content, status, save, sync } = useNote(projectId, path)
   const [source, setSource] = useState(false)
   return (
@@ -145,9 +156,9 @@ function PaperNote({ projectId, path }: { projectId: string; path: string }) {
       <div className="px-8 pt-4">
         {content !== null &&
           (source ? (
-            <SourceEditor key="src" initialMarkdown={content} onChange={save} />
+            <SourceEditor key="src" initialMarkdown={content} onChange={save} onReady={onReady} />
           ) : (
-            <NoteEditor key="rich" initialMarkdown={content} onChange={save} />
+            <NoteEditor key="rich" initialMarkdown={content} onChange={save} onReady={onReady} />
           ))}
       </div>
     </div>

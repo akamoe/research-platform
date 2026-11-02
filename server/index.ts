@@ -139,6 +139,40 @@ api.get("/projects/:id/sources/:sid/pdf", async (c) => {
     "Cache-Control": "private, max-age=3600",
   })
 })
+api.get("/projects/:id/sources/:sid/highlights", async (c) =>
+  c.json(await sources.listHighlights(c.req.param("id"), c.req.param("sid"))),
+)
+api.post("/projects/:id/sources/:sid/highlights", async (c) => {
+  const id = c.req.param("id"), sid = c.req.param("sid")
+  if ((c.req.header("content-type") ?? "").startsWith("multipart/form-data")) {
+    // Area highlight: an image of part of a page.
+    const form = await c.req.parseBody()
+    const image = form.image
+    if (!(image instanceof File)) throw new HttpError(400, "No image uploaded")
+    if (image.size > 20 * 1024 * 1024) throw new HttpError(413, "Image too large")
+    const meta = JSON.parse(String(form.meta ?? "{}"))
+    return c.json(
+      await sources.addHighlight(id, sid, { ...meta, text: undefined, image: new Uint8Array(await image.arrayBuffer()) }),
+      201,
+    )
+  }
+  const body = z
+    .object({ pageIndex: z.number().int(), rects: z.array(z.any()), color: z.string(), text: z.string().optional() })
+    .parse(await c.req.json())
+  return c.json(await sources.addHighlight(id, sid, body), 201)
+})
+api.patch("/projects/:id/sources/:sid/highlights/:hid", async (c) => {
+  const body = z.object({ color: z.string().optional() }).parse(await c.req.json())
+  return c.json(await sources.updateHighlight(c.req.param("id"), c.req.param("sid"), c.req.param("hid"), body))
+})
+api.delete("/projects/:id/sources/:sid/highlights/:hid", async (c) => {
+  await sources.deleteHighlight(c.req.param("id"), c.req.param("sid"), c.req.param("hid"))
+  return c.json({ ok: true })
+})
+api.get("/projects/:id/sources/:sid/assets/:file", async (c) => {
+  const data = await sources.readAsset(c.req.param("id"), c.req.param("sid"), c.req.param("file"))
+  return c.body(data, 200, { "Content-Type": "image/png", "Cache-Control": "private, max-age=86400" })
+})
 api.patch("/projects/:id/sources/:sid", async (c) => {
   const body = z.object({ title: z.string() }).parse(await c.req.json())
   return c.json(await sources.renameSource(c.req.param("id"), c.req.param("sid"), body.title))

@@ -37,6 +37,20 @@ export interface Source {
   notePath: string
   hasText: boolean
 }
+export type HighlightColor = "yellow" | "green" | "blue" | "red" | "purple"
+export interface PdfRect {
+  origin: { x: number; y: number }
+  size: { width: number; height: number }
+}
+export interface Highlight {
+  id: string
+  pageIndex: number
+  rects: PdfRect[]
+  color: HighlightColor
+  text?: string
+  image?: string
+  createdAt: string
+}
 export interface ChatMeta {
   id: string
   title: string
@@ -108,6 +122,20 @@ export const api = {
     request<Source>(`/projects/${id}/sources/${sid}`, json("PATCH", { title })),
   deleteSource: (id: string, sid: string) => request(`/projects/${id}/sources/${sid}`, { method: "DELETE" }),
   pdfUrl: (id: string, sid: string) => `/api/projects/${id}/sources/${sid}/pdf`,
+  highlights: (id: string, sid: string) => request<Highlight[]>(`/projects/${id}/sources/${sid}/highlights`),
+  addTextHighlight: (id: string, sid: string, h: { pageIndex: number; rects: PdfRect[]; color: HighlightColor; text: string }) =>
+    request<Highlight>(`/projects/${id}/sources/${sid}/highlights`, json("POST", h)),
+  addAreaHighlight: (id: string, sid: string, h: { pageIndex: number; rects: PdfRect[]; color: HighlightColor }, image: Blob) => {
+    const form = new FormData()
+    form.append("meta", JSON.stringify(h))
+    form.append("image", image, "capture.png")
+    return request<Highlight>(`/projects/${id}/sources/${sid}/highlights`, { method: "POST", body: form })
+  },
+  recolorHighlight: (id: string, sid: string, hid: string, color: HighlightColor) =>
+    request<Highlight>(`/projects/${id}/sources/${sid}/highlights/${hid}`, json("PATCH", { color })),
+  deleteHighlight: (id: string, sid: string, hid: string) =>
+    request(`/projects/${id}/sources/${sid}/highlights/${hid}`, { method: "DELETE" }),
+  assetUrl: (id: string, sid: string, file: string) => `/api/projects/${id}/sources/${sid}/assets/${file}`,
 
   deleteChat: (id: string, chatId: string) => request(`/projects/${id}/chats/${chatId}`, { method: "DELETE" }),
 }

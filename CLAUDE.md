@@ -6,4 +6,5 @@ Local-first web app for students writing research papers. Hard product rule: the
 - `src/`: Vite + React + Tailwind v4 + shadcn/ui (new-york-v4 sources copied into `src/components/ui`). Hash router in `src/lib/router.ts`. Plate editor config in `src/components/editor/`.
 - UI rules from the owner: shadcn components (or shadcn-compatible libraries) only, minimal, no clutter.
 - Checks: `npm run typecheck` and `npx vite build`.
+- PDF viewer is EmbedPDF (headless, PDFium wasm served locally) in `src/components/papers/pdf-annotator.tsx`. Highlights are stored as overlays in `sources/<id>.highlights.json`, not written into the PDF. Note links to highlights use `#hl/<sourceId>/<highlightId>`.
 - Deletes go to `<data>/.trash`, never hard-delete user files.

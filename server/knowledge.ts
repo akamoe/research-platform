@@ -363,7 +363,8 @@ Use at most 8 concepts, only ones that matter for this paper.`
 
   const { data, actor } = await completeJson(CURATOR, prompt, IngestResult)
   const at = now()
-  const pdf = `../sources/${src.id}.pdf`
+  // The original: the PDF, or the page or video it came from, or its text.
+  const pdf = !src.type || src.type === "pdf" ? `../sources/${src.id}.pdf` : (src.url ?? `../sources/${src.id}.txt`)
   const sourceRef = { id: src.id, resource: pdf, title: src.title }
 
   // The paper's own page.

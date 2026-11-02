@@ -5,10 +5,20 @@ import { extractText, getDocumentProxy, getMeta } from "unpdf"
 import { HttpError, PROJECTS_DIR, TRASH_DIR, safeJoin, writeFileAtomic } from "./paths.ts"
 import { createNote, getProject, touchProject } from "./projects.ts"
 
-/** A paper the student added. The PDF, its extracted text and this record sit side by side in `sources/`. */
+export type SourceType = "pdf" | "web" | "youtube" | "text" | "docx"
+
+/**
+ * Something the student added to read: a PDF, a web page, a YouTube video, a Word file or pasted text.
+ * The original (for PDFs and Word files), its text and this record sit side by side in `sources/`.
+ */
 export interface Source {
   id: string
   title: string
+  /** Missing means "pdf" (sources from before other kinds existed). */
+  type?: SourceType
+  /** Where a web page or video came from. */
+  url?: string
+  author?: string
   fileName: string
   addedAt: string
   pages: number
@@ -103,13 +113,58 @@ export async function addPdf(projectId: string, fileName: string, bytes: Uint8Ar
   await fs.writeFile(file(projectId, id, "txt"), text)
   const hasText = text.replace(/\[page \d+\]/g, "").trim().length > 50
 
-  const notePath = await createNote(
-    projectId,
-    title.slice(0, 80),
-    `# ${title}\n\n## Key points\n\n- \n\n## My questions\n\n- \n`,
-    "Papers",
-  )
-  const source: Source = { id, title, fileName, addedAt: new Date().toISOString(), pages, notePath, hasText }
+  const notePath = await readingNote(projectId, title)
+  const source: Source = { id, title, type: "pdf", fileName, addedAt: new Date().toISOString(), pages, notePath, hasText }
+  await saveSource(projectId, source)
+  await touchProject(projectId)
+  return source
+}
+
+function readingNote(projectId: string, title: string) {
+  return createNote(projectId, title.slice(0, 80), `# ${title}\n\n## Key points\n\n- \n\n## My questions\n\n- \n`, "Papers")
+}
+
+const MAX_TEXT = 5_000_000
+
+/** A source that is only text: a web page, a video transcript, a Word file or something pasted. */
+export async function addTextSource(
+  projectId: string,
+  input: {
+    type: Exclude<SourceType, "pdf">
+    title: string
+    text: string
+    url?: string
+    author?: string
+    fileName?: string
+    /** The original file (Word), kept next to the text. */
+    original?: { bytes: Uint8Array; ext: string }
+  },
+): Promise<Source> {
+  await getProject(projectId)
+  const text = input.text.replace(/\r\n?/g, "\n").trim()
+  if (!text) throw new HttpError(400, "There's no text to add")
+  if (text.length > MAX_TEXT) throw new HttpError(413, "That text is too long (over 5 million characters)")
+  const id = crypto.randomUUID().slice(0, 8)
+  await fs.mkdir(sourcesDir(projectId), { recursive: true })
+  if (input.original) {
+    if (!/^[a-z0-9]{1,8}$/.test(input.original.ext)) throw new HttpError(400, "Invalid file type")
+    await fs.writeFile(path.join(sourcesDir(projectId), `${id}.original.${input.original.ext}`), input.original.bytes)
+  }
+  await fs.writeFile(file(projectId, id, "txt"), text)
+  const title = input.title.replace(/\s+/g, " ").trim().slice(0, 300) || "Untitled source"
+  const notePath = await readingNote(projectId, title)
+  const source: Source = {
+    id,
+    title,
+    type: input.type,
+    ...(input.url ? { url: input.url } : {}),
+    ...(input.author ? { author: input.author.slice(0, 200) } : {}),
+    fileName: input.fileName ?? "",
+    addedAt: new Date().toISOString(),
+    pages: 0,
+    notePath,
+    hasText: text.length > 20,
+  }
   await saveSource(projectId, source)
   await touchProject(projectId)
   return source
@@ -129,16 +184,15 @@ export async function updateSource(projectId: string, sourceId: string, patch: {
   return s
 }
 
-/** Moves the PDF, its record and highlights to the trash. The student's note and captured images stay. */
+/** Moves the source's files, record and highlights to the trash. The student's note and captured images stay. */
 export async function deleteSource(projectId: string, sourceId: string) {
   await getSource(projectId, sourceId)
   const dest = path.join(TRASH_DIR, `${new Date().toISOString().replace(/[:.]/g, "-")}-${projectId}-paper-${sourceId}`)
   await fs.mkdir(dest, { recursive: true })
-  const files = [
-    ...(["pdf", "json", "txt"] as const).map((ext) => file(projectId, sourceId, ext)),
-    path.join(sourcesDir(projectId), `${sourceId}.highlights.json`),
-  ]
-  for (const f of files) if (await exists(f)) await fs.rename(f, path.join(dest, path.basename(f)))
+  const dir = sourcesDir(projectId)
+  // <id>.pdf, .json, .txt, .highlights.json, .original.docx; not the <id>-assets folder of captured images.
+  for (const f of await fs.readdir(dir))
+    if (f.startsWith(`${sourceId}.`)) await fs.rename(path.join(dir, f), path.join(dest, f))
   // Images stay where they are, so notes that embed them keep working.
 }
 

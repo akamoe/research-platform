@@ -8,6 +8,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { api, type Passage, type Source } from "@/lib/api"
 import { openSourceAt } from "@/lib/jump"
 import { cn } from "@/lib/utils"
+import { SourceIcon } from "@/components/papers/source-kind"
 
 /** Citation links the chat writes: #src/<paperId>/<page>/<passage>. */
 export function parseSourceLink(href?: string) {
@@ -59,10 +60,10 @@ export function SourceCite({ projectId, href, children }: { projectId: string; h
               variant="ghost"
               onClick={() => {
                 setOpen(false)
-                openSourceAt(projectId, target)
+                openSourceAt(projectId, { ...target, quote: passage.text.slice(0, 200) })
               }}
             >
-              <ExternalLinkIcon /> Open {target.page > 0 ? `page ${target.page}` : "paper"}
+              <ExternalLinkIcon /> {target.page > 0 ? `Open page ${target.page}` : "Show in source"}
             </Button>
           </div>
         )}
@@ -105,15 +106,15 @@ export function ChatSources({ projectId }: { projectId: string }) {
               )}
             >
               <BookOpenIcon className="size-3 shrink-0" />
-              {on === readable.length ? `${on} paper${on === 1 ? "" : "s"}` : `${on} of ${readable.length} papers`}
+              {on === readable.length ? `${on} source${on === 1 ? "" : "s"}` : `${on} of ${readable.length} sources`}
             </button>
           </PopoverTrigger>
         </TooltipTrigger>
-        <TooltipContent>Papers the assistant searches to answer</TooltipContent>
+        <TooltipContent>Sources the assistant searches to answer</TooltipContent>
       </Tooltip>
       <PopoverContent align="start" side="top" className="w-80 p-0">
         <div className="flex items-center justify-between border-b px-3 py-2">
-          <p className="text-sm font-medium">Papers in this chat</p>
+          <p className="text-sm font-medium">Sources in this chat</p>
           {readable.length > 1 && (
             <button
               className="text-xs text-muted-foreground hover:text-foreground"
@@ -135,6 +136,7 @@ export function ChatSources({ projectId }: { projectId: string }) {
                 !s.hasText && "cursor-default opacity-50 hover:bg-transparent",
               )}
             >
+              <SourceIcon source={s} className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
               <Checkbox
                 className="mt-0.5"
                 disabled={!s.hasText}

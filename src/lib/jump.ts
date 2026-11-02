@@ -4,6 +4,8 @@ import { navigate } from "./router"
 export interface PageTarget {
   sourceId: string
   page: number
+  /** The start of the passage, so text sources (which have no pages) can scroll to it. */
+  quote?: string
 }
 
 let pending: PageTarget | null = null

@@ -17,6 +17,7 @@ import * as knowledge from "./knowledge.ts"
 import * as canvas from "./canvas.ts"
 import * as references from "./references.ts"
 import * as search from "./search.ts"
+import * as importers from "./importers.ts"
 import { backgroundModel } from "./ai.ts"
 
 const PORT = Number(process.env.RP_PORT ?? 5174)
@@ -121,30 +122,82 @@ api.delete("/projects/:id/note", async (c) => {
   return c.json({ ok: true })
 })
 
-// ---------- papers (PDF sources) ----------
+// ---------- sources: PDFs, web pages, videos, Word files, pasted text ----------
 api.get("/projects/:id/sources", async (c) => c.json(await sources.listSources(c.req.param("id"))))
+
+/** After a source is added: find its reference (PDFs and pages with a DOI) and file it into the knowledge base. */
+async function afterAdd(projectId: string, src: sources.Source, doi?: string) {
+  if (!src.hasText) return
+  if (src.type === "pdf" || doi)
+    sources
+      .sourceText(projectId, src.id)
+      .then((text) => (src.type === "pdf" ? references.fromPaper(projectId, src.id, text) : references.fromPaper(projectId, src.id, "", doi)))
+      .catch(() => {})
+  const settings = await readSettings()
+  if (settings.defaultModel && settings.providers[settings.defaultModel.provider]?.apiKey) {
+    knowledge.ingestPaperInBackground(projectId, src.id, src.title)
+  }
+}
+
+const baseName = (name: string) => name.replace(/\.[^.]+$/, "").replace(/[_]+/g, " ").trim()
+
 api.post("/projects/:id/sources", async (c) => {
+  const id = c.req.param("id")
   const len = Number(c.req.header("content-length") ?? 0)
-  if (len > sources.MAX_PDF_BYTES + 1024 * 1024) throw new HttpError(413, "PDF is larger than 200 MB")
+  if (len > sources.MAX_PDF_BYTES + 1024 * 1024) throw new HttpError(413, "That file is larger than 200 MB")
   const form = await c.req.parseBody()
   const file = form.file
   if (!(file instanceof File)) throw new HttpError(400, "No file uploaded")
   const bytes = new Uint8Array(await file.arrayBuffer())
-  const src = await sources.addPdf(c.req.param("id"), file.name, bytes)
-  // If the PDF has a DOI, add it to the references too (in the background; needs the internet).
-  if (src.hasText) {
-    const pid = c.req.param("id")
-    sources
-      .sourceText(pid, src.id)
-      .then((text) => references.fromPaper(pid, src.id, text))
-      .catch(() => {})
+  const ext = file.name.split(".").pop()?.toLowerCase() ?? ""
+  let src: sources.Source
+  if (ext === "docx") {
+    src = await sources.addTextSource(id, {
+      type: "docx",
+      title: baseName(file.name),
+      text: await importers.importDocx(bytes),
+      fileName: file.name,
+      original: { bytes, ext },
+    })
+  } else if (["md", "markdown", "txt", "text"].includes(ext)) {
+    src = await sources.addTextSource(id, {
+      type: "text",
+      title: baseName(file.name),
+      text: new TextDecoder().decode(bytes),
+      fileName: file.name,
+    })
+  } else if (ext === "doc") {
+    throw new HttpError(415, "Old .doc files can't be read. Save it as .docx or PDF in Word first.")
+  } else {
+    src = await sources.addPdf(id, file.name, bytes)
   }
-  // File it into the knowledge base in the background, if a model is set up.
-  const settings = await readSettings()
-  if (src.hasText && settings.defaultModel && settings.providers[settings.defaultModel.provider]?.apiKey) {
-    knowledge.ingestPaperInBackground(c.req.param("id"), src.id, src.title)
-  }
+  await afterAdd(id, src)
   return c.json(src, 201)
+})
+api.post("/projects/:id/sources/link", async (c) => {
+  const id = c.req.param("id")
+  const { url } = z.object({ url: z.string().min(1).max(4000) }).parse(await c.req.json())
+  const got = await importers.importLink(url)
+  if (got.kind === "pdf") {
+    const src = await sources.addPdf(id, got.fileName, got.bytes)
+    await afterAdd(id, src)
+    return c.json(src, 201)
+  }
+  const src = await sources.addTextSource(id, { type: got.type, title: got.title, text: got.text, url: got.url, author: got.author })
+  await afterAdd(id, src, got.doi)
+  return c.json(src, 201)
+})
+api.post("/projects/:id/sources/text", async (c) => {
+  const id = c.req.param("id")
+  const body = z.object({ title: z.string().max(300), text: z.string().min(1) }).parse(await c.req.json())
+  const title = body.title.trim() || body.text.trim().split("\n")[0].replace(/^#+\s*/, "").slice(0, 80)
+  const src = await sources.addTextSource(id, { type: "text", title, text: body.text })
+  await afterAdd(id, src)
+  return c.json(src, 201)
+})
+api.get("/projects/:id/sources/:sid/text", async (c) => {
+  await sources.getSource(c.req.param("id"), c.req.param("sid"))
+  return c.json({ text: await sources.sourceText(c.req.param("id"), c.req.param("sid")) })
 })
 api.get("/projects/:id/sources/:sid", async (c) =>
   c.json(await sources.getSource(c.req.param("id"), c.req.param("sid"))),
@@ -370,10 +423,10 @@ api.post("/projects/:id/chat", async (c) => {
       openNote = { path: body.openNotePath, content: await projects.readNote(id, body.openNotePath) }
     } catch {}
   }
-  let paper: { title: string; text: string } | undefined
+  let paper: { title: string; text: string; type?: string } | undefined
   if (body.sourceId) {
     const src = await sources.getSource(id, body.sourceId)
-    paper = { title: src.title, text: await sources.sourceText(id, src.id) }
+    paper = { title: src.title, text: await sources.sourceText(id, src.id), type: src.type }
   }
   const lastQuestion = [...body.messages].reverse().find((m) => m.role === "user")?.content ?? ""
   const memory = await knowledge.contextFor(id, `${lastQuestion} ${paper?.title ?? ""}`)

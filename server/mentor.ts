@@ -12,7 +12,7 @@ export function mentorPrompt(opts: {
   project: Project
   noteTitles: string[]
   openNote?: { path: string; content: string }
-  paper?: { title: string; text: string }
+  paper?: { title: string; text: string; type?: string }
   knowledge?: { index: string; pages: string } | null
   passages?: { all: Source[]; hits: Hit[] }
 }) {
@@ -51,9 +51,15 @@ ${kb.index}
 ${kb.pages ? `\nThe pages most relevant to the latest message:\n${kb.pages}` : ""}`
 }
 
-function paperSection(paper: { title: string; text: string }) {
-  const intro = `## The paper this chat is about: "${paper.title}"
-The student is reading this paper and wants to discuss it. Answer from the paper's text below and cite page numbers like (p. 4). If the paper doesn't say something, say so rather than guessing. Help them understand and question the paper; don't write their summary or review of it for them.`
+function paperSection(paper: { title: string; text: string; type?: string }) {
+  const where =
+    paper.type === "youtube"
+      ? "a YouTube video's transcript; cite timestamps like (12:30)"
+      : paper.type && paper.type !== "pdf"
+        ? "a text source; cite the section heading when it helps"
+        : "a paper; cite page numbers like (p. 4)"
+  const intro = `## The source this chat is about: "${paper.title}"
+The student is reading this source and wants to discuss it. It is ${where}. Answer from its text below. If it doesn't say something, say so rather than guessing. Help them understand and question it; don't write their summary or review of it for them.`
   if (!paper.text.trim()) {
     return `${intro}\n\nNo text could be extracted from this PDF (it may be a scanned image). Tell the student you can't read it.`
   }

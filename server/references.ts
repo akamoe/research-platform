@@ -293,8 +293,8 @@ export function doiInText(text: string) {
 }
 
 /** When a PDF with a DOI is added, add its reference too. Quiet on failure: the paper is already in. */
-export async function fromPaper(projectId: string, sourceId: string, text: string) {
-  const doi = doiInText(text)
+export async function fromPaper(projectId: string, sourceId: string, text: string, knownDoi?: string) {
+  const doi = knownDoi ?? doiInText(text)
   if (!doi) return null
   try {
     const item = await lookupDoi(doi)

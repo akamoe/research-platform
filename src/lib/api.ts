@@ -28,9 +28,14 @@ export interface ChatMessage {
   role: "user" | "assistant"
   content: string
 }
+export type SourceType = "pdf" | "web" | "youtube" | "text" | "docx"
 export interface Source {
   id: string
   title: string
+  /** Missing means a PDF. */
+  type?: SourceType
+  url?: string
+  author?: string
   fileName: string
   addedAt: string
   pages: number
@@ -251,11 +256,17 @@ export const api = {
   chat: (id: string, chatId: string) => request<Chat>(`/projects/${id}/chats/${chatId}`),
   sources: (id: string) => request<Source[]>(`/projects/${id}/sources`),
   source: (id: string, sid: string) => request<Source>(`/projects/${id}/sources/${sid}`),
-  uploadPdf: (id: string, file: File) => {
+  /** A PDF, Word, Markdown or text file. */
+  uploadSource: (id: string, file: File) => {
     const form = new FormData()
     form.append("file", file)
     return request<Source>(`/projects/${id}/sources`, { method: "POST", body: form })
   },
+  /** A web page, a YouTube video or a link to a PDF. */
+  addSourceLink: (id: string, url: string) => request<Source>(`/projects/${id}/sources/link`, json("POST", { url })),
+  addSourceText: (id: string, title: string, text: string) =>
+    request<Source>(`/projects/${id}/sources/text`, json("POST", { title, text })),
+  sourceText: (id: string, sid: string) => request<{ text: string }>(`/projects/${id}/sources/${sid}/text`),
   renameSource: (id: string, sid: string, title: string) =>
     request<Source>(`/projects/${id}/sources/${sid}`, json("PATCH", { title })),
   setSourceInChat: (id: string, sid: string, inChat: boolean) =>

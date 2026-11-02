@@ -8,6 +8,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { ChatPanel } from "@/components/chat/chat-panel"
 import { NoteEditor, SourceEditor, type NoteInserter } from "@/components/editor/note-editor"
 import { PdfAnnotator } from "./pdf-annotator"
+import { TextSource } from "./text-source"
+import { sourceType } from "./source-kind"
 import { useNote } from "@/hooks/use-note"
 import { api, type PublicSettings, type Source } from "@/lib/api"
 import { cn } from "@/lib/utils"
@@ -30,6 +32,7 @@ export function PaperView({
     localStorage.getItem("rp-paper-tab") === "chat" ? "chat" : "note",
   )
   const [title, setTitle] = useState(source.title)
+  const isPdf = sourceType(source) === "pdf"
   useEffect(() => localStorage.setItem("rp-paper-tab", tab), [tab])
   const inserter = useRef<NoteInserter | null>(null)
   const insert = useCallback((md: string) => {
@@ -58,22 +61,28 @@ export function PaperView({
           onBlur={rename}
           onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
           className="min-w-0 flex-1 truncate bg-transparent text-sm font-medium outline-none"
-          aria-label="Paper title"
+          aria-label="Source title"
         />
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button variant="ghost" size="icon" className="size-8 text-muted-foreground" asChild>
-              <a href={api.pdfUrl(projectId, source.id)} target="_blank" rel="noreferrer" aria-label="Open PDF in new tab">
-                <ExternalLinkIcon className="size-4" />
-              </a>
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Open PDF in a new tab</TooltipContent>
-        </Tooltip>
+        {isPdf && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" className="size-8 text-muted-foreground" asChild>
+                <a href={api.pdfUrl(projectId, source.id)} target="_blank" rel="noreferrer" aria-label="Open PDF in new tab">
+                  <ExternalLinkIcon className="size-4" />
+                </a>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Open PDF in a new tab</TooltipContent>
+          </Tooltip>
+        )}
       </div>
       <ResizablePanelGroup orientation="horizontal" className="min-h-0 flex-1">
         <ResizablePanel defaultSize="55%" minSize="25%">
-          <PdfAnnotator projectId={projectId} source={source} onInsert={insert} />
+          {isPdf ? (
+            <PdfAnnotator projectId={projectId} source={source} onInsert={insert} />
+          ) : (
+            <TextSource projectId={projectId} source={source} />
+          )}
         </ResizablePanel>
         <ResizableHandle />
         <ResizablePanel defaultSize="45%" minSize="25%">
@@ -86,7 +95,9 @@ export function PaperView({
                 <MessageSquareIcon className="size-3.5" /> Chat
               </TabButton>
               {!source.hasText && (
-                <span className="ml-auto pr-1 text-xs text-muted-foreground">No text found, chat can't read this PDF</span>
+                <span className="ml-auto pr-1 text-xs text-muted-foreground">
+                  {isPdf ? "No text found, chat can't read this PDF" : "No text found, chat can't read this"}
+                </span>
               )}
             </div>
             {/* Both stay mounted so a reply keeps streaming while you switch to the note. */}

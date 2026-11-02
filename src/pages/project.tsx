@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import {
   ArrowLeftIcon,
-  BookOpenIcon,
   LibraryBigIcon,
   QuoteIcon,
   SearchIcon,
@@ -55,6 +54,8 @@ import { CanvasView } from "@/components/canvas/canvas-view"
 import { KnowledgeView } from "@/components/knowledge/knowledge-view"
 import { ReferencesView } from "@/components/references/references-view"
 import { SearchDialog } from "@/components/search/search-dialog"
+import { AddSourceDialog } from "@/components/papers/add-source-dialog"
+import { ACCEPT, SourceIcon, isAcceptedFile } from "@/components/papers/source-kind"
 import { api, type NoteFile, type Project, type PublicSettings, type Source } from "@/lib/api"
 import { navigate, type View } from "@/lib/router"
 import { useNote } from "@/hooks/use-note"
@@ -86,6 +87,7 @@ export function ProjectPage({ projectId, notePath, paperId, view, kbPage, settin
   >(null)
   const [chatOpen, setChatOpen] = useState(() => localStorage.getItem("rp-chat-open") === "1")
   const [searching, setSearching] = useState(false)
+  const [addingSource, setAddingSource] = useState(false)
 
   // A note keeps its editor when it's renamed, so typing isn't interrupted; any other note gets a fresh one.
   const renamedTo = useRef<string | null>(null)
@@ -112,13 +114,14 @@ export function ProjectPage({ projectId, notePath, paperId, view, kbPage, settin
   }, [notePath, paperId, view, firstNote, projectId])
 
   const upload = async (files: File[]) => {
-    const pdfs = files.filter((f) => f.type === "application/pdf" || f.name.toLowerCase().endsWith(".pdf"))
-    if (!pdfs.length) return toast.error("Only PDF files can be added")
-    setUploading((n) => n + pdfs.length)
+    const ok = files.filter(isAcceptedFile)
+    if (!ok.length) return toast.error("You can add PDF, Word (.docx), Markdown and text files")
+    if (ok.length < files.length) toast(`Skipped ${files.length - ok.length} file(s) that aren't PDF, Word, Markdown or text`)
+    setUploading((n) => n + ok.length)
     let last: Source | undefined
-    for (const f of pdfs) {
+    for (const f of ok) {
       try {
-        last = await api.uploadPdf(projectId, f)
+        last = await api.uploadSource(projectId, f)
         setPapers((p) => [last!, ...p])
       } catch (err) {
         toast.error(`${f.name}: ${(err as Error).message}`)
@@ -203,7 +206,7 @@ export function ProjectPage({ projectId, notePath, paperId, view, kbPage, settin
       <input
         ref={fileInput}
         type="file"
-        accept="application/pdf,.pdf"
+        accept={ACCEPT}
         multiple
         hidden
         onChange={(e) => {
@@ -217,7 +220,7 @@ export function ProjectPage({ projectId, notePath, paperId, view, kbPage, settin
           onDragLeave={() => setDragging(false)}
         >
           <div className="rounded-xl border-2 border-dashed px-10 py-8 text-sm text-muted-foreground">
-            Drop PDFs to add them to this project
+            Drop PDFs, Word, Markdown or text files to add them
           </div>
         </div>
       )}
@@ -289,9 +292,9 @@ export function ProjectPage({ projectId, notePath, paperId, view, kbPage, settin
             </SidebarGroupContent>
           </SidebarGroup>
           <SidebarGroup>
-            <SidebarGroupLabel>Papers</SidebarGroupLabel>
-            <SidebarGroupAction onClick={() => fileInput.current?.click()} title="Add PDF">
-              <UploadIcon /> <span className="sr-only">Add PDF</span>
+            <SidebarGroupLabel>Sources</SidebarGroupLabel>
+            <SidebarGroupAction onClick={() => setAddingSource(true)} title="Add a source">
+              <PlusIcon /> <span className="sr-only">Add a source</span>
             </SidebarGroupAction>
             <SidebarGroupContent>
               <SidebarMenu>
@@ -302,7 +305,7 @@ export function ProjectPage({ projectId, notePath, paperId, view, kbPage, settin
                       onClick={() => navigate({ name: "project", projectId, paper: p.id })}
                       title={p.title}
                     >
-                      <BookOpenIcon />
+                      <SourceIcon source={p} />
                       <span>{p.title}</span>
                     </SidebarMenuButton>
                     <DropdownMenu>
@@ -313,7 +316,7 @@ export function ProjectPage({ projectId, notePath, paperId, view, kbPage, settin
                       </DropdownMenuTrigger>
                       <DropdownMenuContent side="right" align="start">
                         <DropdownMenuItem variant="destructive" onSelect={() => setConfirmDelete({ kind: "paper", id: p.id })}>
-                          <Trash2Icon /> Remove paper
+                          <Trash2Icon /> Remove source
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
@@ -322,14 +325,14 @@ export function ProjectPage({ projectId, notePath, paperId, view, kbPage, settin
                 {uploading > 0 && (
                   <SidebarMenuItem>
                     <SidebarMenuButton disabled className="text-muted-foreground">
-                      <UploadIcon className="animate-pulse" /> Adding {uploading} PDF{uploading > 1 ? "s" : ""}…
+                      <UploadIcon className="animate-pulse" /> Adding {uploading} file{uploading > 1 ? "s" : ""}…
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 )}
                 {papers.length === 0 && uploading === 0 && (
                   <SidebarMenuItem>
-                    <SidebarMenuButton onClick={() => fileInput.current?.click()} className="text-muted-foreground">
-                      <UploadIcon /> Add a PDF
+                    <SidebarMenuButton onClick={() => setAddingSource(true)} className="text-muted-foreground">
+                      <PlusIcon /> Add a source
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 )}
@@ -474,7 +477,7 @@ export function ProjectPage({ projectId, notePath, paperId, view, kbPage, settin
               {confirmDelete?.kind === "project"
                 ? `Delete "${project.name}"?`
                 : confirmDelete?.kind === "paper"
-                  ? "Remove this paper?"
+                  ? "Remove this source?"
                   : "Delete this note?"}
             </AlertDialogTitle>
             <AlertDialogDescription>
@@ -489,6 +492,17 @@ export function ProjectPage({ projectId, notePath, paperId, view, kbPage, settin
         </AlertDialogContent>
       </AlertDialog>
       <SearchDialog projectId={projectId} open={searching} onOpenChange={setSearching} />
+      <AddSourceDialog
+        projectId={projectId}
+        open={addingSource}
+        onOpenChange={setAddingSource}
+        onPickFiles={() => fileInput.current?.click()}
+        onAdded={(src) => {
+          setPapers((p) => [src, ...p])
+          refreshNotes().catch(() => {})
+          navigate({ name: "project", projectId, paper: src.id })
+        }}
+      />
     </SidebarProvider>
   )
 }

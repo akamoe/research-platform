@@ -39,7 +39,7 @@ export function SearchDialog({ projectId, open, onOpenChange }: { projectId: str
 
   const pick = (h: SearchHit) => {
     onOpenChange(false)
-    if (h.kind === "source") openSourceAt(projectId, { sourceId: h.ref, page: h.page })
+    if (h.kind === "source") openSourceAt(projectId, { sourceId: h.ref, page: h.page, quote: h.snippet })
     else navigate({ name: "project", projectId, note: h.ref })
   }
 
@@ -47,24 +47,24 @@ export function SearchDialog({ projectId, open, onOpenChange }: { projectId: str
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogHeader className="sr-only">
         <DialogTitle>Search</DialogTitle>
-        <DialogDescription>Search the text of your papers and notes</DialogDescription>
+        <DialogDescription>Search the text of your sources and notes</DialogDescription>
       </DialogHeader>
       <DialogContent className="top-[15%] translate-y-0 overflow-hidden p-0 sm:max-w-2xl" showCloseButton={false}>
         <Command shouldFilter={false} className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:text-muted-foreground">
           <div className="relative">
-            <CommandInput value={q} onValueChange={setQ} placeholder="Search your papers and notes…" className="h-12" />
+            <CommandInput value={q} onValueChange={setQ} placeholder="Search your sources and notes…" className="h-12" />
             {loading && <LoaderCircleIcon className="absolute top-1/2 right-3 size-4 -translate-y-1/2 animate-spin text-muted-foreground" />}
           </div>
           <CommandList className="max-h-[60vh]">
             {hits === null ? (
               <p className="px-4 py-6 text-center text-sm text-muted-foreground">
-                Finds words in the full text of every paper and note, and opens the page they're on.
+                Finds words in the full text of every source and note, and opens the page they're on.
               </p>
             ) : (
               !loading && <CommandEmpty>Nothing found for “{q.trim()}”.</CommandEmpty>
             )}
             {papers.length > 0 && (
-              <CommandGroup heading="Papers">
+              <CommandGroup heading="Sources">
                 {papers.map((h) => (
                   <CommandItem key={`${h.ref}-${h.page}-${h.chunk}`} value={`${h.ref}-${h.page}-${h.chunk}`} onSelect={() => pick(h)} className="items-start gap-3 py-2.5">
                     <BookOpenIcon className="mt-0.5 text-muted-foreground" />

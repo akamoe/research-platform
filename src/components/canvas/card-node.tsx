@@ -1,11 +1,12 @@
 import { memo, useContext, useState } from "react"
-import { Handle, Position, type NodeProps } from "@xyflow/react"
+import type { NodeProps } from "@xyflow/react"
 import { BookMarkedIcon, CheckIcon, LoaderCircleIcon, SparklesIcon } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Textarea } from "@/components/ui/textarea"
 import { navigate } from "@/lib/router"
 import { cn } from "@/lib/utils"
+import { ConnectDots } from "./drawing"
 import { CanvasCtx, KINDS, kindOf, type CardNode } from "./shared"
 
 export const CardNodeView = memo(function CardNodeView({ data, selected }: NodeProps<CardNode>) {
@@ -27,8 +28,7 @@ export const CardNodeView = memo(function CardNodeView({ data, selected }: NodeP
       )}
       onDoubleClick={() => editing === null && setEditing(card.text)}
     >
-      <Handle type="target" position={Position.Top} className="!pointer-events-none !opacity-0" isConnectable={false} />
-      <Handle type="source" position={Position.Bottom} className="!pointer-events-none !opacity-0" isConnectable={false} />
+      <ConnectDots />
       <div className="flex items-center gap-2">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

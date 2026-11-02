@@ -1,8 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Background,
+  ConnectionMode,
   Controls,
+  NodeToolbar,
+  Position,
   ReactFlow,
+  SelectionMode,
   ReactFlowProvider,
   useEdgesState,
   useNodesState,
@@ -17,16 +21,17 @@ import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Textarea } from "@/components/ui/textarea"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { api, type CanvasArrow, type CanvasData, type CanvasLink, type CanvasShape, type CardKind } from "@/lib/api"
+import { api, type CanvasArrow, type CanvasCard, type CanvasData, type CanvasLink, type CanvasShape, type CardKind } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import { CardNodeView } from "./card-node"
-import { ArrowEdgeView, DrawOverlay, LinkEdgeView, ShapeNodeView, TOOLS, Toolbar } from "./drawing"
+import { ArrowEdgeView, ConnectionLine, DrawOverlay, EdgeBarCtx, LinkEdgeView, SelectionBar, ShapeNodeView, TOOLS, Toolbar } from "./drawing"
 import {
   CARD_H,
   CARD_W,
   CanvasCtx,
   KINDS,
   RELATION_STYLE,
+  colorOf,
   newId,
   type AnyEdge,
   type AnyNode,
@@ -76,9 +81,13 @@ function CanvasInner({ projectId, chatOpen, onToggleChat }: Props) {
     )
   }, [projectId])
 
+  /** Items to select once they appear, e.g. fresh duplicates. */
+  const selectNext = useRef<Set<string> | null>(null)
+
   // Cards and shapes -> React Flow nodes, keeping a node where it is while it's dragged or resized.
   useEffect(() => {
     if (!data) return
+    const pick = selectNext.current
     setNodes((prev) => {
       const old = new Map(prev.map((n) => [n.id, n]))
       const pos = (id: string, x: number, y: number) => {
@@ -94,6 +103,7 @@ function CanvasInner({ projectId, chatOpen, onToggleChat }: Props) {
           type: "shape",
           position: pos(shape.id, shape.x, shape.y),
           data: { shape },
+          selected: pick ? pick.has(shape.id) : o?.selected,
           // Boxes sit behind cards so they can group them; strokes, arrows and text sit on top.
           zIndex: shape.type === "rect" || shape.type === "ellipse" ? -1 : 1,
           width: sized ? (o?.resizing ? o.width : shape.w) : undefined,
@@ -108,6 +118,7 @@ function CanvasInner({ projectId, chatOpen, onToggleChat }: Props) {
         type: "card",
         position: pos(card.id, card.x, card.y),
         data: { card },
+        selected: pick ? pick.has(card.id) : old.get(card.id)?.selected,
       })
       return [...(data.shapes ?? []).map(shapeNode), ...data.cards.map(cardNode)]
     })
@@ -115,6 +126,8 @@ function CanvasInner({ projectId, chatOpen, onToggleChat }: Props) {
 
   useEffect(() => {
     if (!data) return
+    const pick = selectNext.current
+    selectNext.current = null
     setEdges((prev) => {
       const selected = new Set(prev.filter((e) => e.selected).map((e) => e.id))
       return [
@@ -134,7 +147,7 @@ function CanvasInner({ projectId, chatOpen, onToggleChat }: Props) {
           target: arrow.to,
           type: "arrow" as const,
           data: { arrow },
-          selected: selected.has(arrow.id),
+          selected: pick ? pick.has(arrow.id) : selected.has(arrow.id),
         })),
       ]
     })
@@ -194,22 +207,31 @@ function CanvasInner({ projectId, chatOpen, onToggleChat }: Props) {
     if (shape.type !== "draw") setTool("select")
   }
 
-  /** An arrow drawn from one card or shape to another. Returns false if it doesn't start and end on one. */
-  const addArrow = (from: { x: number; y: number }, to: { x: number; y: number }) => {
+  /** The card or shape at a point, with a little slack so a near miss still counts. */
+  const nodeAt = (p: { x: number; y: number }) => {
     const rank = (n: AnyNode) => {
       if (n.type === "card") return 0
       const s = n.data.shape
       return s.type === "text" ? 1 : 2 + (s.w * s.h) / 1e9
     }
-    const at = (p: { x: number; y: number }) =>
-      flow
-        .getIntersectingNodes({ x: p.x - 2, y: p.y - 2, width: 4, height: 4 }, true)
-        .filter((n) => !(n.type === "shape" && (n.data.shape.type === "draw" || n.data.shape.type === "arrow")))
-        .sort((a, b) => rank(a) - rank(b))[0]
-    const a = at(from)
-    const b = at(to)
+    const slack = 12 / flow.getViewport().zoom
+    return flow
+      .getIntersectingNodes({ x: p.x - slack, y: p.y - slack, width: slack * 2, height: slack * 2 }, true)
+      .filter((n) => !(n.type === "shape" && (n.data.shape.type === "draw" || n.data.shape.type === "arrow")))
+      .sort((a, b) => rank(a) - rank(b))[0]
+  }
+
+  const connect = (from: string, to: string) => {
+    if (from === to) return
+    changeDrawing((d) => ({ arrows: [...d.arrows, { id: newId("a"), from, to, color }] }))
+  }
+
+  /** An arrow drawn with the arrow tool. Returns false if it doesn't start and end on a card or shape. */
+  const addArrow = (from: { x: number; y: number }, to: { x: number; y: number }) => {
+    const a = nodeAt(from)
+    const b = nodeAt(to)
     if (!a || !b || a.id === b.id) return false
-    changeDrawing((d) => ({ arrows: [...d.arrows, { id: newId("a"), from: a.id, to: b.id, color }] }))
+    connect(a.id, b.id)
     setTool("select")
     return true
   }
@@ -246,10 +268,16 @@ function CanvasInner({ projectId, chatOpen, onToggleChat }: Props) {
   // Tool shortcuts, like most drawing apps. Off while a text box is about to take the typing.
   const editingRef = useRef(editingShape)
   editingRef.current = editingShape
+  const duplicateRef = useRef<() => void>(() => {})
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.metaKey || e.ctrlKey || e.altKey || editingRef.current) return
+      if (editingRef.current) return
       if ((e.target as HTMLElement).closest?.("input, textarea, select, [contenteditable='true'], [role='dialog'], [role='menu']")) return
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "d") {
+        e.preventDefault()
+        return duplicateRef.current()
+      }
+      if (e.metaKey || e.ctrlKey || e.altKey) return
       if (e.key === "Escape") return setTool("select")
       const t = TOOLS.find((x) => x.key.toLowerCase() === e.key.toLowerCase())
       if (t) {
@@ -365,7 +393,8 @@ function CanvasInner({ projectId, chatOpen, onToggleChat }: Props) {
     }
   }
 
-  const selectedShapes = nodes.filter((n) => n.selected && n.type === "shape").map((n) => n.id)
+  const selectedNodes = nodes.filter((n) => n.selected)
+  const selectedShapes = selectedNodes.filter((n) => n.type === "shape").map((n) => n.id)
   const selectedArrows = edges.filter((e) => e.selected && e.type === "arrow").map((e) => e.id)
   const pickColor = (c: string) => {
     setColor(c)
@@ -376,6 +405,70 @@ function CanvasInner({ projectId, chatOpen, onToggleChat }: Props) {
       arrows: d.arrows.map((a) => (selectedArrows.includes(a.id) ? { ...a, color: c } : a)),
     }))
   }
+
+  /** Copy the selected cards and shapes (and arrows between them) a little down and to the right. */
+  const duplicate = async () => {
+    const picked = flow.getNodes().filter((n) => n.selected)
+    if (!picked.length) return
+    const OFF = 32
+    const ids = new Map<string, string>()
+    const cards: CanvasCard[] = []
+    for (const n of picked) {
+      if (n.type !== "card") continue
+      const c = n.data.card
+      try {
+        const card = await api.addCard(projectId, {
+          text: c.text,
+          kind: c.kindBy === "student" ? c.kind : undefined,
+          x: Math.round(n.position.x + OFF),
+          y: Math.round(n.position.y + OFF),
+        })
+        cards.push(card)
+        ids.set(c.id, card.id)
+      } catch (err) {
+        toast.error((err as Error).message)
+      }
+    }
+    const shapes = picked.flatMap((n) => {
+      if (n.type !== "shape") return []
+      const id = newId("s")
+      ids.set(n.id, id)
+      return [{ ...n.data.shape, id, x: Math.round(n.position.x + OFF), y: Math.round(n.position.y + OFF) }]
+    })
+    const arrows = drawing.current.arrows
+      .filter((a) => ids.has(a.from) && ids.has(a.to))
+      .map((a) => ({ ...a, id: newId("a"), from: ids.get(a.from)!, to: ids.get(a.to)! }))
+    selectNext.current = new Set([...ids.values(), ...arrows.map((a) => a.id)])
+    if (cards.length) {
+      setData((d) => (d ? { ...d, cards: [...d.cards, ...cards] } : d))
+      scheduleThink()
+    }
+    if (shapes.length || arrows.length) changeDrawing((d) => ({ shapes: [...d.shapes, ...shapes], arrows: [...d.arrows, ...arrows] }))
+  }
+  duplicateRef.current = duplicate
+
+  const deleteSelection = () =>
+    flow.deleteElements({
+      nodes: flow.getNodes().filter((n) => n.selected),
+      edges: flow.getEdges().filter((e) => e.selected && e.type === "arrow"),
+    })
+
+  const busy = nodes.some((n) => n.dragging || n.resizing)
+  const showBar = tool === "select" && !editingShape && !busy
+  const bar = (
+    <SelectionBar
+      color={
+        (selectedNodes.find((n) => n.type === "shape") as ShapeNode | undefined)?.data.shape.color ??
+        data?.arrows?.find((x) => selectedArrows.includes(x.id))?.color ??
+        color
+      }
+      canColor={selectedShapes.length > 0 || selectedArrows.length > 0}
+      canDuplicate={selectedNodes.length > 0}
+      onColor={pickColor}
+      onDuplicate={duplicate}
+      onDelete={deleteSelection}
+    />
+  )
 
   const showCards = (ids: string[]) => {
     setFocus(new Set(ids))
@@ -404,109 +497,136 @@ function CanvasInner({ projectId, chatOpen, onToggleChat }: Props) {
 
   return (
     <CanvasCtx.Provider value={ctx}>
-      <div className="flex h-full min-h-0 flex-col">
-        <div className="flex h-12 shrink-0 items-center gap-2 px-3">
-          <SidebarTrigger className="text-muted-foreground" />
-          <span className="text-sm font-medium">Canvas</span>
-          <span className={cn("flex items-center gap-1.5 text-xs text-muted-foreground", aiOff && "text-amber-600 dark:text-amber-400")}>
-            {reading && <LoaderCircleIcon className="size-3.5 animate-spin" />}
-            {status}
-          </span>
-          <div className="ml-auto flex items-center gap-1">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className={cn("h-8 gap-1.5 text-muted-foreground", themesOpen && "bg-muted text-foreground")}
-                  onClick={toggleThemes}
-                >
-                  <SparklesIcon className="size-4" /> Themes
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>What's emerging from your notes</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className={cn("size-8 text-muted-foreground", chatOpen && "bg-muted text-foreground")}
-                  onClick={onToggleChat}
-                >
-                  <MessageSquareIcon className="size-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Chat (Ctrl/⌘ J)</TooltipContent>
-            </Tooltip>
+      <EdgeBarCtx.Provider value={showBar && !selectedNodes.length && selectedArrows.length ? bar : null}>
+        <div className="flex h-full min-h-0 flex-col">
+          <div className="flex h-12 shrink-0 items-center gap-2 px-3">
+            <SidebarTrigger className="text-muted-foreground" />
+            <span className="text-sm font-medium">Canvas</span>
+            <span className={cn("flex items-center gap-1.5 text-xs text-muted-foreground", aiOff && "text-amber-600 dark:text-amber-400")}>
+              {reading && <LoaderCircleIcon className="size-3.5 animate-spin" />}
+              {status}
+            </span>
+            <div className="ml-auto flex items-center gap-1">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className={cn("h-8 gap-1.5 text-muted-foreground", themesOpen && "bg-muted text-foreground")}
+                    onClick={toggleThemes}
+                  >
+                    <SparklesIcon className="size-4" /> Themes
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>What's emerging from your notes</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className={cn("size-8 text-muted-foreground", chatOpen && "bg-muted text-foreground")}
+                    onClick={onToggleChat}
+                  >
+                    <MessageSquareIcon className="size-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Chat (Ctrl/⌘ J)</TooltipContent>
+              </Tooltip>
+            </div>
           </div>
-        </div>
-        <div className="flex min-h-0 flex-1 border-t">
-          <div ref={wrapper} className="relative min-w-0 flex-1">
-            {data && (
-              <ReactFlow<AnyNode, AnyEdge>
-                nodes={nodes}
-                edges={edges}
-                nodeTypes={nodeTypes}
-                edgeTypes={edgeTypes}
-                onNodesChange={onNodesChange}
-                onEdgesChange={onEdgesChange}
-                onNodeDragStop={(_, __, dragged) => {
-                  const moved = new Map(dragged.map((n) => [n.id, { x: Math.round(n.position.x), y: Math.round(n.position.y) }]))
-                  const cards = dragged.filter((n) => n.type === "card")
-                  if (cards.length) {
-                    setData((d) => (d ? { ...d, cards: d.cards.map((c) => ({ ...c, ...moved.get(c.id) })) } : d))
-                    for (const n of cards) api.updateCard(projectId, n.id, moved.get(n.id)!).catch(() => {})
-                  }
-                  if (dragged.some((n) => n.type === "shape")) {
-                    changeDrawing((d) => ({ shapes: d.shapes.map((s) => ({ ...s, ...moved.get(s.id) })) }))
-                  }
-                }}
-                onNodesDelete={(ns) => {
-                  removeCards(ns.filter((n) => n.type === "card").map((n) => n.id))
-                  removeShapes(ns.filter((n) => n.type === "shape").map((n) => n.id))
-                }}
-                onEdgesDelete={(es) => {
-                  const gone = new Set(es.filter((e) => e.type === "arrow").map((e) => e.id))
-                  if (gone.size) changeDrawing((d) => ({ arrows: d.arrows.filter((a) => !gone.has(a.id)) }))
-                }}
-                deleteKeyCode={["Delete", "Backspace"]}
-                nodesConnectable={false}
-                elevateNodesOnSelect={false}
-                fitView
-                fitViewOptions={{ maxZoom: 1, padding: 0.3 }}
-                minZoom={0.2}
-                maxZoom={2}
-                proOptions={{ hideAttribution: true }}
-                className="bg-muted/40"
-              >
-                <Background gap={24} size={1} color="var(--border)" />
-                <Controls
-                  showInteractive={false}
-                  position="bottom-left"
-                  className="overflow-hidden rounded-lg border bg-background shadow-xs [&_button]:border-b [&_button]:bg-background [&_button]:fill-foreground [&_button:hover]:bg-muted"
-                />
-              </ReactFlow>
-            )}
-            {tool !== "select" && <DrawOverlay tool={tool} color={color} onShape={addShape} onArrow={addArrow} />}
-            {empty && tool === "select" && (
-              <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-8">
-                <div className="max-w-sm text-center text-sm text-muted-foreground">
-                  <p className="font-medium text-foreground">Write whatever you're thinking.</p>
-                  <p className="mt-1">
-                    One thought per card. The AI quietly sorts them, notes what to check, links related ones, flags
-                    contradictions and points out themes. It won't write anything for you.
-                  </p>
+          <div className="flex min-h-0 flex-1 border-t">
+            <div ref={wrapper} className="relative min-w-0 flex-1">
+              {data && (
+                <ReactFlow<AnyNode, AnyEdge>
+                  nodes={nodes}
+                  edges={edges}
+                  nodeTypes={nodeTypes}
+                  edgeTypes={edgeTypes}
+                  onNodesChange={onNodesChange}
+                  onEdgesChange={onEdgesChange}
+                  onNodeDragStop={(_, __, dragged) => {
+                    const moved = new Map(dragged.map((n) => [n.id, { x: Math.round(n.position.x), y: Math.round(n.position.y) }]))
+                    const cards = dragged.filter((n) => n.type === "card")
+                    if (cards.length) {
+                      setData((d) => (d ? { ...d, cards: d.cards.map((c) => ({ ...c, ...moved.get(c.id) })) } : d))
+                      for (const n of cards) api.updateCard(projectId, n.id, moved.get(n.id)!).catch(() => {})
+                    }
+                    if (dragged.some((n) => n.type === "shape")) {
+                      changeDrawing((d) => ({ shapes: d.shapes.map((s) => ({ ...s, ...moved.get(s.id) })) }))
+                    }
+                  }}
+                  onNodesDelete={(ns) => {
+                    removeCards(ns.filter((n) => n.type === "card").map((n) => n.id))
+                    removeShapes(ns.filter((n) => n.type === "shape").map((n) => n.id))
+                  }}
+                  onEdgesDelete={(es) => {
+                    const gone = new Set(es.filter((e) => e.type === "arrow").map((e) => e.id))
+                    if (gone.size) changeDrawing((d) => ({ arrows: d.arrows.filter((a) => !gone.has(a.id)) }))
+                  }}
+                  onConnect={(c) => connect(c.source, c.target)}
+                  onConnectEnd={(event, state) => {
+                    // Dropped on a card or shape but not on one of its dots: still connect.
+                    if (state.isValid || !state.fromNode) return
+                    const pt = "changedTouches" in event ? event.changedTouches[0] : event
+                    const to = nodeAt(flow.screenToFlowPosition({ x: pt.clientX, y: pt.clientY }))
+                    if (to) connect(state.fromNode.id, to.id)
+                  }}
+                  connectionMode={ConnectionMode.Loose}
+                  connectionRadius={28}
+                  connectionLineComponent={ConnectionLine}
+                  connectionLineStyle={{ stroke: colorOf(color) }}
+                  deleteKeyCode={["Delete", "Backspace"]}
+                  elevateNodesOnSelect={false}
+                  // Drag on empty canvas to select; scroll or hold Space (or the middle button) to move around.
+                  selectionOnDrag
+                  selectionMode={SelectionMode.Partial}
+                  panOnDrag={[1, 2]}
+                  panOnScroll
+                  multiSelectionKeyCode={["Meta", "Control", "Shift"]}
+                  fitView
+                  fitViewOptions={{ maxZoom: 1, padding: 0.3 }}
+                  minZoom={0.2}
+                  maxZoom={2}
+                  proOptions={{ hideAttribution: true }}
+                  className="bg-muted/40"
+                >
+                  <Background gap={24} size={1} color="var(--border)" />
+                  <NodeToolbar
+                    nodeId={selectedNodes.map((n) => n.id)}
+                    isVisible={showBar && selectedNodes.length > 0}
+                    position={Position.Top}
+                    offset={10}
+                  >
+                    {bar}
+                  </NodeToolbar>
+                  <Controls
+                    showInteractive={false}
+                    position="bottom-left"
+                    className="overflow-hidden rounded-lg border bg-background shadow-xs [&_button]:border-b [&_button]:bg-background [&_button]:fill-foreground [&_button:hover]:bg-muted"
+                  />
+                </ReactFlow>
+              )}
+              {tool !== "select" && <DrawOverlay tool={tool} color={color} onShape={addShape} onArrow={addArrow} />}
+              {empty && tool === "select" && (
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-8">
+                  <div className="max-w-sm text-center text-sm text-muted-foreground">
+                    <p className="font-medium text-foreground">Write whatever you're thinking.</p>
+                    <p className="mt-1">
+                      One thought per card. The AI quietly sorts them, notes what to check, links related ones, flags
+                      contradictions and points out themes. It won't write anything for you.
+                    </p>
+                  </div>
                 </div>
-              </div>
-            )}
-            <Toolbar tool={tool} onTool={setTool} color={color} onColor={pickColor} />
-            {!!data?.links.length && <Legend relations={[...new Set(data.links.map((l) => l.relation))]} />}
-            <Composer onAdd={add} />
+              )}
+              <Toolbar tool={tool} onTool={setTool} color={color} onColor={pickColor} />
+              {!!data?.links.length && <Legend relations={[...new Set(data.links.map((l) => l.relation))]} />}
+              <Composer onAdd={add} />
+            </div>
+            {themesOpen && <Themes data={data} onShow={showCards} />}
           </div>
-          {themesOpen && <Themes data={data} onShow={showCards} />}
         </div>
-      </div>
+      </EdgeBarCtx.Provider>
     </CanvasCtx.Provider>
   )
 }

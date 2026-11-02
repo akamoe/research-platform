@@ -1,15 +1,19 @@
-import { memo, useContext, useEffect, useMemo, useRef, useState } from "react"
+import { createContext, memo, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import {
   BaseEdge,
+  EdgeToolbar,
+  Handle,
   NodeResizer,
+  Position,
   getStraightPath,
   useInternalNode,
   useReactFlow,
+  type ConnectionLineComponentProps,
   type EdgeProps,
   type NodeProps,
 } from "@xyflow/react"
 import { getStroke } from "perfect-freehand"
-import { CircleIcon, MousePointer2Icon, MoveUpRightIcon, PencilIcon, SquareIcon, TypeIcon } from "lucide-react"
+import { CircleIcon, CopyIcon, MousePointer2Icon, MoveUpRightIcon, PencilIcon, SquareIcon, Trash2Icon, TypeIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Separator } from "@/components/ui/separator"
@@ -28,6 +32,7 @@ import {
   colorOf,
   newId,
   strokePath,
+  type AnyNode,
   type ArrowEdge,
   type LinkEdge,
   type ShapeNode,
@@ -71,34 +76,114 @@ export function Toolbar({ tool, onTool, color, onColor }: { tool: Tool; onTool: 
         ))}
       </ToggleGroup>
       <Separator className="my-0.5 !w-6" />
-      <Popover>
+      <ColorPicker color={color} onColor={onColor} side="right" />
+    </div>
+  )
+}
+
+function ColorPicker({ color, onColor, side }: { color: string; onColor: (c: string) => void; side: "right" | "top" }) {
+  return (
+    <Popover>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <PopoverTrigger asChild>
+            <Button variant="ghost" size="icon" className="size-8" aria-label="Color">
+              <span className="size-4 rounded-full ring-1 ring-border" style={{ background: colorOf(color) }} />
+            </Button>
+          </PopoverTrigger>
+        </TooltipTrigger>
+        <TooltipContent side={side}>Color</TooltipContent>
+      </Tooltip>
+      <PopoverContent side={side} align={side === "right" ? "end" : "center"} className="w-auto p-1.5">
+        <div className="grid grid-cols-4 gap-1">
+          {COLORS.map((c) => (
+            <button
+              key={c.id}
+              title={c.label}
+              aria-label={c.label}
+              onClick={() => onColor(c.id)}
+              className={cn("flex size-8 items-center justify-center rounded-md hover:bg-accent", c.id === color && "bg-accent")}
+            >
+              <span className="size-4 rounded-full" style={{ background: c.value }} />
+            </button>
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
+  )
+}
+
+/** The small bar above whatever is selected: color (for shapes and arrows), duplicate, delete. */
+export function SelectionBar({
+  color,
+  canColor,
+  canDuplicate,
+  onColor,
+  onDuplicate,
+  onDelete,
+}: {
+  color: string
+  canColor: boolean
+  canDuplicate: boolean
+  onColor: (c: string) => void
+  onDuplicate: () => void
+  onDelete: () => void
+}) {
+  const mod = /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘" : "Ctrl+"
+  return (
+    <div className="nodrag nopan flex items-center gap-0.5 rounded-lg border bg-background p-1 shadow-sm" onDoubleClick={(e) => e.stopPropagation()}>
+      {canColor && <ColorPicker color={color} onColor={onColor} side="top" />}
+      {canDuplicate && (
         <Tooltip>
           <TooltipTrigger asChild>
-            <PopoverTrigger asChild>
-              <Button variant="ghost" size="icon" className="size-8" aria-label="Color">
-                <span className="size-4 rounded-full ring-1 ring-border" style={{ background: colorOf(color) }} />
-              </Button>
-            </PopoverTrigger>
+            <Button variant="ghost" size="icon" className="size-8" aria-label="Duplicate" onClick={onDuplicate}>
+              <CopyIcon />
+            </Button>
           </TooltipTrigger>
-          <TooltipContent side="right">Color</TooltipContent>
+          <TooltipContent side="top">
+            Duplicate <span className="ml-1 opacity-60">{mod}D</span>
+          </TooltipContent>
         </Tooltip>
-        <PopoverContent side="right" align="end" className="w-auto p-1.5">
-          <div className="grid grid-cols-4 gap-1">
-            {COLORS.map((c) => (
-              <button
-                key={c.id}
-                title={c.label}
-                aria-label={c.label}
-                onClick={() => onColor(c.id)}
-                className={cn("flex size-8 items-center justify-center rounded-md hover:bg-accent", c.id === color && "bg-accent")}
-              >
-                <span className="size-4 rounded-full" style={{ background: c.value }} />
-              </button>
-            ))}
-          </div>
-        </PopoverContent>
-      </Popover>
+      )}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button variant="ghost" size="icon" className="size-8 hover:text-destructive" aria-label="Delete" onClick={onDelete}>
+            <Trash2Icon />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent side="top">
+          Delete <span className="ml-1 opacity-60">Del</span>
+        </TooltipContent>
+      </Tooltip>
     </div>
+  )
+}
+
+/** The selection bar for arrows, when only arrows are selected. Null otherwise. */
+export const EdgeBarCtx = createContext<ReactNode>(null)
+
+const DOT =
+  "!size-2.5 !min-h-0 !min-w-0 !rounded-full !border !border-ring !bg-background rp-dot hover:!bg-ring"
+
+/** Dots on each side of a card or shape. Drag from one onto another card or shape to connect them with an arrow. */
+export function ConnectDots() {
+  return (
+    <>
+      {[Position.Top, Position.Right, Position.Bottom, Position.Left].map((p) => (
+        <Handle key={p} id={p} type="source" position={p} className={DOT} />
+      ))}
+    </>
+  )
+}
+
+/** The arrow that follows the pointer while connecting. */
+export function ConnectionLine({ fromX, fromY, toX, toY, connectionLineStyle }: ConnectionLineComponentProps<AnyNode>) {
+  const c = (connectionLineStyle?.stroke as string) ?? "var(--foreground)"
+  return (
+    <g>
+      <ArrowHead id="rp-head-connect" color={c} />
+      <line x1={fromX} y1={fromY} x2={toX} y2={toY} style={{ stroke: c, strokeWidth: 2 }} markerEnd="url(#rp-head-connect)" />
+    </g>
   )
 }
 
@@ -186,6 +271,7 @@ export const ShapeNodeView = memo(function ShapeNodeView({ id, data, selected, w
         className={cn("rounded-md px-1.5 py-1", selected && !editing && "ring-2 ring-ring/50")}
         onDoubleClick={() => ctx.setEditingShape(id)}
       >
+        <ConnectDots />
         {editing ? (
           editor
         ) : (
@@ -233,6 +319,7 @@ export const ShapeNodeView = memo(function ShapeNodeView({ id, data, selected, w
   return (
     <>
       {resizer}
+      <ConnectDots />
       <div
         className={cn("flex size-full items-center justify-center border-2 p-2", shape.type === "ellipse" ? "rounded-[50%]" : "rounded-lg")}
         style={{ borderColor: color, background: `color-mix(in oklch, ${color} 5%, transparent)` }}
@@ -273,6 +360,7 @@ export function LinkEdgeView({ id, source, target, data }: EdgeProps<LinkEdge>) 
 
 /** An arrow the student drew from one card or shape to another. It follows them when they move. */
 export function ArrowEdgeView({ id, source, target, data, selected }: EdgeProps<ArrowEdge>) {
+  const bar = useContext(EdgeBarCtx)
   const s = useInternalNode(source)
   const t = useInternalNode(target)
   if (!s || !t || !data) return null
@@ -283,6 +371,11 @@ export function ArrowEdgeView({ id, source, target, data, selected }: EdgeProps<
   const marker = `rp-head-${id}`
   return (
     <>
+      {selected && bar && (
+        <EdgeToolbar edgeId={id} x={(a.x + b.x) / 2} y={(a.y + b.y) / 2 - 12} alignY="top" isVisible>
+          {bar}
+        </EdgeToolbar>
+      )}
       <ArrowHead id={marker} color={color} />
       <BaseEdge
         id={id}

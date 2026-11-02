@@ -116,3 +116,25 @@
     @apply bg-background text-foreground antialiased;
   }
 }
+
+/* Canvas: drag-to-select box in the theme's colors. */
+.react-flow {
+  --xy-selection-background-color: color-mix(in oklch, var(--ring) 8%, transparent);
+  --xy-selection-border: 1px solid color-mix(in oklch, var(--ring) 55%, transparent);
+}
+/* Connection dots show on the card or shape under the pointer, on selected ones, and while connecting. */
+.rp-dot {
+  opacity: 0;
+  transition: opacity 120ms;
+}
+.react-flow__node:hover .rp-dot,
+.react-flow__node.selected .rp-dot,
+.react-flow__handle.rp-dot.connectingfrom,
+.react-flow__handle.rp-dot.connectingto {
+  opacity: 1;
+}
+/* After a drag-select, each item shows its own outline; the group box only catches the drag. */
+.react-flow__nodesselection-rect {
+  background: transparent !important;
+  border-color: transparent !important;
+}

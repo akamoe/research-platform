@@ -58,6 +58,12 @@ export async function copyRich(html: string, text: string) {
   }
 }
 
+export function saveStyle(s: CitationStyle) {
+  try {
+    localStorage.setItem(STYLE_KEY, JSON.stringify(s))
+  } catch {}
+}
+
 function download(name: string, text: string, type: string) {
   const url = URL.createObjectURL(new Blob([text], { type }))
   const a = document.createElement("a")
@@ -69,7 +75,15 @@ function download(name: string, text: string, type: string) {
 
 // ---------- style picker: the popular styles, or search all of them ----------
 
-export function StylePicker({ value, onChange }: { value: CitationStyle; onChange: (s: CitationStyle) => void }) {
+export function StylePicker({
+  value,
+  onChange,
+  className,
+}: {
+  value: CitationStyle
+  onChange: (s: CitationStyle) => void
+  className?: string
+}) {
   const [open, setOpen] = useState(false)
   const [q, setQ] = useState("")
   const [results, setResults] = useState<CitationStyle[]>([])
@@ -90,12 +104,12 @@ export function StylePicker({ value, onChange }: { value: CitationStyle; onChang
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="outline" role="combobox" aria-expanded={open} className="w-full min-w-0 justify-between font-normal">
+        <Button variant="outline" role="combobox" aria-expanded={open} className={cn("w-full min-w-0 justify-between font-normal", className)}>
           <span className="min-w-0 truncate">{value.title}</span>
           <ChevronsUpDownIcon className="text-muted-foreground" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-(--radix-popover-trigger-width) p-0" align="start">
+      <PopoverContent className="w-(--radix-popover-trigger-width) min-w-80 p-0" align="start">
         <Command shouldFilter={false}>
           <CommandInput value={q} onValueChange={setQ} placeholder="Search 10,000+ styles: journal, university, field…" />
           <CommandList>
@@ -141,6 +155,7 @@ export function ExportDialog({
   onOpenChange,
   notes,
   initialNote,
+  selected,
   total,
 }: {
   projectId: string
@@ -148,10 +163,13 @@ export function ExportDialog({
   onOpenChange: (o: boolean) => void
   notes: { path: string; name: string }[]
   initialNote?: string
+  /** Reference ids picked on the references page; offered as the first scope. */
+  selected?: string[]
   total?: number
 }) {
   const [style, setStyle] = useState<CitationStyle>(savedStyle)
-  const [scope, setScope] = useState(initialNote ?? "all")
+  const initialScope = initialNote ?? (selected?.length ? "selected" : "all")
+  const [scope, setScope] = useState(initialScope)
   const [format, setFormat] = useState<(typeof FORMATS)[number]["id"]>("bibliography")
   const [out, setOut] = useState<{ text: string; count: number } | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -159,12 +177,19 @@ export function ExportDialog({
   const seq = useRef(0)
 
   useEffect(() => {
-    if (open) setScope(initialNote ?? "all")
-  }, [open, initialNote])
+    if (!open) return
+    setScope(initialScope)
+    setStyle(savedStyle())
+  }, [open, initialScope])
 
+  const selectedKey = selected?.join(",") ?? ""
   const body = useMemo(
-    () => ({ style: style.id, format, ...(scope === "all" ? {} : { notePath: scope }) }),
-    [style.id, format, scope],
+    () => ({
+      style: style.id,
+      format,
+      ...(scope === "all" ? {} : scope === "selected" ? { ids: selectedKey.split(",").filter(Boolean) } : { notePath: scope }),
+    }),
+    [style.id, format, scope, selectedKey],
   )
 
   useEffect(() => {
@@ -183,7 +208,7 @@ export function ExportDialog({
 
   const pickStyle = (s: CitationStyle) => {
     setStyle(s)
-    localStorage.setItem(STYLE_KEY, JSON.stringify(s))
+    saveStyle(s)
   }
 
   const f = FORMATS.find((x) => x.id === format)!
@@ -200,7 +225,7 @@ export function ExportDialog({
   }
   const save = () => {
     if (!out) return
-    const base = scope === "all" ? "references" : `${noteName ?? "note"} references`
+    const base = scope === "all" || scope === "selected" ? "references" : `${noteName ?? "note"} references`
     const text =
       format === "bibliography"
         ? `<!doctype html><meta charset="utf-8"><title>${base}</title><style>body{font-family:serif;max-width:46rem;margin:3rem auto;line-height:1.6}.csl-entry{margin-bottom:.8em;padding-left:2em;text-indent:-2em}.csl-left-margin{float:left;min-width:2.5em;text-indent:0}.csl-right-inline{margin-left:2.5em;text-indent:0}</style>${out.text}`
@@ -223,6 +248,7 @@ export function ExportDialog({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
+                {!!selected?.length && <SelectItem value="selected">Selected ({selected.length})</SelectItem>}
                 <SelectItem value="all">All references{total !== undefined ? ` (${total})` : ""}</SelectItem>
                 {notes.length > 0 && <SelectSeparator />}
                 {notes.map((n) => (
@@ -269,7 +295,13 @@ export function ExportDialog({
         </div>
         <div className="flex items-center gap-2">
           <span className="mr-auto text-xs text-muted-foreground">
-            {out && !error && (scope === "all" ? `${total ?? out.count} references` : `${out.count} cited in this note`)}
+            {out &&
+              !error &&
+              (scope === "all"
+                ? `${total ?? out.count} references`
+                : scope === "selected"
+                  ? `${out.count} selected`
+                  : `${out.count} cited in this note`)}
           </span>
           <Button variant="outline" onClick={save} disabled={!out?.text || !!error}>
             <DownloadIcon /> Download .{f.ext}

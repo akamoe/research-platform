@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import {
+  ChevronDownIcon,
   CopyIcon,
   DownloadIcon,
   FileTextIcon,
@@ -11,21 +12,24 @@ import {
   SearchIcon,
   Trash2Icon,
   UploadIcon,
+  XIcon,
 } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Separator } from "@/components/ui/separator"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Textarea } from "@/components/ui/textarea"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { api, type CslName, type NoteFile, type RefCandidate, type Reference, type Source } from "@/lib/api"
 import { navigate } from "@/lib/router"
 import { cn } from "@/lib/utils"
-import { ExportDialog, copyRich, matchesRef, refAuthors, refYear, savedStyle } from "./cite"
+import { ExportDialog, StylePicker, copyRich, matchesRef, refAuthors, refYear, savedStyle, saveStyle } from "./cite"
 
 interface Props {
   projectId: string
@@ -40,7 +44,9 @@ export function ReferencesView({ projectId, notes, papers, chatOpen, onToggleCha
   const [q, setQ] = useState("")
   const [adding, setAdding] = useState(false)
   const [editing, setEditing] = useState<Reference | null>(null)
-  const [exporting, setExporting] = useState(false)
+  const [exporting, setExporting] = useState<"all" | "selected" | null>(null)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [style, setStyle] = useState(savedStyle)
 
   const load = () => api.references(projectId).then(setRefs, (e) => toast.error(e.message))
   useEffect(() => {
@@ -54,6 +60,86 @@ export function ReferencesView({ projectId, notes, papers, chatOpen, onToggleCha
   }, [papers.length]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const shown = (refs ?? []).filter((r) => matchesRef(r, q))
+
+  // Forget picks that were deleted or re-keyed.
+  useEffect(() => {
+    if (!refs) return
+    setSelected((sel) => {
+      const next = new Set([...sel].filter((id) => refs.some((r) => r.id === id)))
+      return next.size === sel.size ? sel : next
+    })
+  }, [refs])
+
+  useEffect(() => {
+    if (!selected.size) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !document.querySelector("[role=dialog],[role=menu],[data-radix-popper-content-wrapper]"))
+        setSelected(new Set())
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [selected.size])
+
+  const toggle = (id: string, on: boolean) =>
+    setSelected((sel) => {
+      const next = new Set(sel)
+      if (on) next.add(id)
+      else next.delete(id)
+      return next
+    })
+  const shownPicked = shown.filter((r) => selected.has(r.id)).length
+  const allState = shownPicked === 0 ? false : shownPicked === shown.length ? true : "indeterminate"
+  const toggleAll = () =>
+    setSelected((sel) => {
+      const next = new Set(sel)
+      for (const r of shown) {
+        if (allState === true) next.delete(r.id)
+        else next.add(r.id)
+      }
+      return next
+    })
+  // In list order, so styles that number by order of appearance (IEEE, Vancouver) follow the page.
+  const pickedIds = (refs ?? []).filter((r) => selected.has(r.id)).map((r) => r.id)
+
+  const copySelected = async (format: "bibliography" | "citation") => {
+    try {
+      const body = { style: style.id, format, ids: pickedIds }
+      const [html, text] = await Promise.all([
+        api.renderReferences(projectId, { ...body, output: "html" }),
+        api.renderReferences(projectId, { ...body, output: "text" }),
+      ])
+      await copyRich(html.text, text.text.trim())
+      const n = pickedIds.length
+      toast.success(
+        format === "citation"
+          ? `Copied in-text citation: ${text.text.trim()}`
+          : `Copied ${n} reference${n === 1 ? "" : "s"} in ${style.title}`,
+      )
+    } catch (err) {
+      toast.error((err as Error).message)
+    }
+  }
+
+  const removeSelected = async () => {
+    const gone = (refs ?? []).filter((r) => selected.has(r.id))
+    try {
+      for (const r of gone) await api.removeReference(projectId, r.id)
+      setRefs((rs) => rs?.filter((x) => !selected.has(x.id)) ?? rs)
+      setSelected(new Set())
+      toast(`${gone.length} reference${gone.length === 1 ? "" : "s"} removed`, {
+        action: {
+          label: "Undo",
+          onClick: async () => {
+            await api.restoreReferences(projectId, gone)
+            load()
+          },
+        },
+      })
+    } catch (err) {
+      toast.error((err as Error).message)
+      load()
+    }
+  }
 
   const remove = async (r: Reference) => {
     try {
@@ -90,13 +176,13 @@ export function ReferencesView({ projectId, notes, papers, chatOpen, onToggleCha
   const noteList = notes.map((n) => ({ path: n.path, name: n.name.replace(/\.md$/i, "") }))
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="relative flex h-full min-h-0 flex-col">
       <div className="flex h-12 shrink-0 items-center gap-2 px-3">
         <SidebarTrigger className="text-muted-foreground" />
         <span className="text-sm font-medium">References</span>
         {refs && <span className="text-xs text-muted-foreground">{refs.length}</span>}
         <div className="ml-auto flex items-center gap-1">
-          <Button variant="ghost" size="sm" className="h-8 text-muted-foreground" onClick={() => setExporting(true)} disabled={!refs?.length}>
+          <Button variant="ghost" size="sm" className="h-8 text-muted-foreground" onClick={() => setExporting("all")} disabled={!refs?.length}>
             <DownloadIcon /> Export
           </Button>
           <Button size="sm" className="h-8" onClick={() => setAdding(true)}>
@@ -120,9 +206,17 @@ export function ReferencesView({ projectId, notes, papers, chatOpen, onToggleCha
       <div className="min-h-0 flex-1 overflow-y-auto border-t">
         <div className="mx-auto max-w-3xl px-6 py-6">
           {refs && refs.length > 0 && (
-            <div className="relative mb-4">
-              <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by author, title, year or key" className="pl-8" />
+            <div className="mb-4 flex items-center gap-3 pl-4">
+              <Checkbox
+                checked={allState}
+                onCheckedChange={toggleAll}
+                disabled={!shown.length}
+                aria-label={allState === true ? "Unselect all" : "Select all"}
+              />
+              <div className="relative flex-1">
+                <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by author, title, year or key" className="pl-8" />
+              </div>
             </div>
           )}
           {refs === null ? null : refs.length === 0 ? (
@@ -136,11 +230,17 @@ export function ReferencesView({ projectId, notes, papers, chatOpen, onToggleCha
               </Button>
             </div>
           ) : (
-            <div className="divide-y rounded-lg border">
+            <div className={cn("divide-y rounded-lg border", selected.size > 0 && "mb-20")}>
               {shown.map((r) => {
                 const paper = r.source ? papers.find((p) => p.id === r.source) : undefined
                 return (
-                  <div key={r.id} className="group flex items-start gap-3 px-4 py-3">
+                  <div key={r.id} className={cn("group flex items-start gap-3 px-4 py-3", selected.has(r.id) && "bg-muted/50")}>
+                    <Checkbox
+                      className="mt-0.5"
+                      checked={selected.has(r.id)}
+                      onCheckedChange={(v) => toggle(r.id, v === true)}
+                      aria-label={`Select ${r.title || r.id}`}
+                    />
                     <button className="min-w-0 flex-1 text-left" onClick={() => setEditing(r)}>
                       <p className="text-sm leading-snug font-medium">{r.title || "Untitled"}</p>
                       <p className="mt-0.5 truncate text-xs text-muted-foreground">
@@ -210,6 +310,62 @@ export function ReferencesView({ projectId, notes, papers, chatOpen, onToggleCha
           )}
         </div>
       </div>
+      {selected.size > 0 && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-6 flex justify-center px-4">
+          <div
+            role="toolbar"
+            aria-label="Selected references"
+            className="pointer-events-auto flex items-center gap-1 rounded-xl border bg-popover p-1.5 text-popover-foreground shadow-lg"
+          >
+            <span className="px-2 text-sm whitespace-nowrap tabular-nums">{selected.size} selected</span>
+            <Separator orientation="vertical" className="mx-1 !h-5" />
+            <StylePicker
+              value={style}
+              onChange={(st) => {
+                setStyle(st)
+                saveStyle(st)
+              }}
+              className="h-8 w-64"
+            />
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" className="h-8">
+                  <CopyIcon /> Copy <ChevronDownIcon className="-mr-1 opacity-70" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="center" side="top">
+                <DropdownMenuItem onSelect={() => copySelected("bibliography")}>Reference list</DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => copySelected("citation")}>In-text citation</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <Button variant="ghost" size="sm" className="h-8" onClick={() => setExporting("selected")}>
+              <DownloadIcon /> Export
+            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon" className="size-8 text-muted-foreground" aria-label="Delete selected" onClick={removeSelected}>
+                  <Trash2Icon />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Delete</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-8 text-muted-foreground"
+                  aria-label="Clear selection"
+                  onClick={() => setSelected(new Set())}
+                >
+                  <XIcon />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Clear selection (Esc)</TooltipContent>
+            </Tooltip>
+          </div>
+        </div>
+      )}
       <AddDialog
         projectId={projectId}
         open={adding}
@@ -224,7 +380,19 @@ export function ReferencesView({ projectId, notes, papers, chatOpen, onToggleCha
         onClose={() => setEditing(null)}
         onSaved={(r, oldId) => setRefs((rs) => rs?.map((x) => (x.id === oldId ? r : x)) ?? rs)}
       />
-      <ExportDialog projectId={projectId} open={exporting} onOpenChange={setExporting} notes={noteList} total={refs?.length} />
+      <ExportDialog
+        projectId={projectId}
+        open={exporting !== null}
+        onOpenChange={(o) => {
+          if (!o) {
+            setExporting(null)
+            setStyle(savedStyle())
+          }
+        }}
+        notes={noteList}
+        selected={exporting === "selected" ? pickedIds : undefined}
+        total={refs?.length}
+      />
     </div>
   )
 }

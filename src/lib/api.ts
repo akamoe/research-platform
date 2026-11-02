@@ -301,6 +301,8 @@ export const api = {
   reviewKbPage: (id: string, page: string) =>
     request<KbPage>(`/projects/${id}/knowledge/page/review?page=${encodeURIComponent(page)}`, { method: "POST" }),
   kbLog: (id: string) => request<{ content: string }>(`/projects/${id}/knowledge/log`),
+  sourceSummary: (id: string, sid: string) =>
+    request<{ page: KbPage | null; running: boolean; error: string | null }>(`/projects/${id}/sources/${sid}/summary`),
   ingest: (id: string, sourceIds?: string[]) =>
     request<KbStatus>(`/projects/${id}/knowledge/ingest`, json("POST", { sourceIds })),
   lintKnowledge: (id: string) => request<{ at: string; findings: KbFinding[] }>(`/projects/${id}/knowledge/lint`, { method: "POST" }),

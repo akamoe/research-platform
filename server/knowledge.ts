@@ -307,7 +307,7 @@ export function ingestPaperInBackground(projectId: string, sourceId: string, tit
     .finally(() => running.delete(sourceId))
 }
 
-async function findPaperPage(projectId: string, sourceId: string) {
+export async function findPaperPage(projectId: string, sourceId: string) {
   const pages = await listPages(projectId)
   return pages.find((p) => p.type === "Paper" && p.sources.some((s) => s.id === sourceId))
 }

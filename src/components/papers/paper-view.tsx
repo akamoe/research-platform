@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { CodeIcon, ExternalLinkIcon, MessageSquareIcon, NotebookPenIcon } from "lucide-react"
+import { CodeIcon, ExternalLinkIcon, ListChecksIcon, MessageSquareIcon, NotebookPenIcon } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable"
@@ -9,6 +9,7 @@ import { ChatPanel } from "@/components/chat/chat-panel"
 import { NoteEditor, SourceEditor, type NoteInserter } from "@/components/editor/note-editor"
 import { PdfAnnotator } from "./pdf-annotator"
 import { TextSource } from "./text-source"
+import { SourceSummary } from "./source-summary"
 import { sourceType } from "./source-kind"
 import { useNote } from "@/hooks/use-note"
 import { api, type PublicSettings, type Source } from "@/lib/api"
@@ -28,9 +29,10 @@ export function PaperView({
   onOpenSettings: () => void
   onRenamed: (s: Source) => void
 }) {
-  const [tab, setTab] = useState<"note" | "chat">(() =>
-    localStorage.getItem("rp-paper-tab") === "chat" ? "chat" : "note",
-  )
+  const [tab, setTab] = useState<Tab>(() => {
+    const t = localStorage.getItem("rp-paper-tab")
+    return t === "chat" || t === "summary" ? t : "note"
+  })
   const [title, setTitle] = useState(source.title)
   const isPdf = sourceType(source) === "pdf"
   useEffect(() => localStorage.setItem("rp-paper-tab", tab), [tab])
@@ -94,6 +96,9 @@ export function PaperView({
               <TabButton active={tab === "chat"} onClick={() => setTab("chat")}>
                 <MessageSquareIcon className="size-3.5" /> Chat
               </TabButton>
+              <TabButton active={tab === "summary"} onClick={() => setTab("summary")}>
+                <ListChecksIcon className="size-3.5" /> Summary
+              </TabButton>
               {!source.hasText && (
                 <span className="ml-auto pr-1 text-xs text-muted-foreground">
                   {isPdf ? "No text found, chat can't read this PDF" : "No text found, chat can't read this"}
@@ -113,12 +118,19 @@ export function PaperView({
                 onOpenSettings={onOpenSettings}
               />
             </div>
+            {tab === "summary" && (
+              <div className="min-h-0 flex-1">
+                <SourceSummary projectId={projectId} source={source} settings={settings} onOpenSettings={onOpenSettings} />
+              </div>
+            )}
           </div>
         </ResizablePanel>
       </ResizablePanelGroup>
     </div>
   )
 }
+
+type Tab = "note" | "chat" | "summary"
 
 function TabButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (

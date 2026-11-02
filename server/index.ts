@@ -283,6 +283,18 @@ api.post("/projects/:id/knowledge/ingest", async (c) => {
   for (const s of todo) knowledge.ingestPaperInBackground(id, s.id, s.title)
   return c.json(await knowledge.status(id))
 })
+/** A source's page in the knowledge base (its summary and key points), and whether it is being written. */
+api.get("/projects/:id/sources/:sid/summary", async (c) => {
+  const { id, sid } = c.req.param()
+  const meta = await knowledge.findPaperPage(id, sid)
+  const st = await knowledge.status(id)
+  const job = st.notIngested.find((s) => s.id === sid)
+  return c.json({
+    page: meta ? await knowledge.readPage(id, meta.id) : null,
+    running: !!job?.running || st.running.some((r) => r.id === sid),
+    error: job?.error ?? null,
+  })
+})
 api.post("/projects/:id/knowledge/lint", async (c) => c.json(await knowledge.lint(c.req.param("id"))))
 
 // ---------- notes canvas ----------

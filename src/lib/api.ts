@@ -129,6 +129,44 @@ export interface CanvasArrow {
   to: string
   color: string
 }
+export interface CslName {
+  family?: string
+  given?: string
+  literal?: string
+}
+/** A reference in CSL-JSON, keyed by its citation key. */
+export interface Reference {
+  id: string
+  type: string
+  title?: string
+  author?: CslName[]
+  editor?: CslName[]
+  issued?: { "date-parts"?: (number | string)[][]; literal?: string }
+  "container-title"?: string
+  volume?: string
+  issue?: string
+  page?: string
+  publisher?: string
+  DOI?: string
+  URL?: string
+  ISBN?: string
+  source?: string
+  addedAt?: string
+  [field: string]: unknown
+}
+export interface RefCandidate {
+  title: string
+  authors: string
+  year: string
+  container: string
+  doi: string
+}
+export interface CitationStyle {
+  id: string
+  title: string
+}
+export type CiteFormat = "bibliography" | "citation" | "bibtex" | "ris" | "csljson"
+
 export interface CanvasData {
   cards: CanvasCard[]
   links: CanvasLink[]
@@ -240,6 +278,20 @@ export const api = {
   saveDrawing: (id: string, drawing: { shapes: CanvasShape[]; arrows: CanvasArrow[] }) =>
     request<{ shapes: CanvasShape[]; arrows: CanvasArrow[] }>(`/projects/${id}/canvas/drawing`, json("PUT", drawing)),
   think: (id: string) => request<CanvasData>(`/projects/${id}/canvas/think`, { method: "POST" }),
+  references: (id: string) => request<Reference[]>(`/projects/${id}/references`),
+  addReferences: (id: string, text: string) =>
+    request<{ added: Reference[]; existing: Reference[]; candidates?: RefCandidate[] }>(`/projects/${id}/references`, json("POST", { text })),
+  restoreReferences: (id: string, items: Reference[]) =>
+    request<{ added: Reference[] }>(`/projects/${id}/references/items`, json("POST", { items })),
+  updateReference: (id: string, refId: string, patch: Partial<Reference>) =>
+    request<Reference>(`/projects/${id}/references/${encodeURIComponent(refId)}`, json("PATCH", patch)),
+  removeReference: (id: string, refId: string) =>
+    request<Reference>(`/projects/${id}/references/${encodeURIComponent(refId)}`, { method: "DELETE" }),
+  renderReferences: (
+    id: string,
+    body: { style?: string; format: CiteFormat; output?: "html" | "text"; ids?: string[]; notePath?: string },
+  ) => request<{ text: string; ids?: string[] }>(`/projects/${id}/references/render`, json("POST", body)),
+  citationStyles: (q: string) => request<CitationStyle[]>(`/citation-styles?q=${encodeURIComponent(q)}`),
 }
 
 /** Send a chat turn and receive the reply as it streams in. */

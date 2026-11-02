@@ -12,6 +12,10 @@
     "lint": "oxlint"
   },
   "dependencies": {
+    "@citation-js/core": "^0.9.0",
+    "@citation-js/plugin-bibtex": "^0.9.0",
+    "@citation-js/plugin-csl": "^0.9.0",
+    "@citation-js/plugin-ris": "^0.9.0",
     "@embedpdf/core": "^2.15.1",
     "@embedpdf/engines": "^2.15.1",
     "@embedpdf/models": "^2.15.1",

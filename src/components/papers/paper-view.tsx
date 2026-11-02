@@ -136,7 +136,7 @@ function PaperNote({
   const [source, setSource] = useState(false)
   return (
     <div className="relative h-full overflow-y-auto">
-      <div className="absolute top-2 right-2 z-10 flex items-center gap-2">
+      <div className="absolute top-2 right-2 z-20 flex items-center gap-2">
         <span className={cn("text-xs text-muted-foreground", status === "error" && "text-destructive")}>
           {status === "saving" ? "Saving…" : status === "error" ? "Not saved" : ""}
         </span>
@@ -153,12 +153,12 @@ function PaperNote({
           <CodeIcon className="size-3.5" />
         </Button>
       </div>
-      <div className="px-8 pt-4">
+      <div className="pt-4 pr-11 pl-8">
         {content !== null &&
           (source ? (
             <SourceEditor key="src" initialMarkdown={content} onChange={save} onReady={onReady} />
           ) : (
-            <NoteEditor key="rich" initialMarkdown={content} onChange={save} onReady={onReady} />
+            <NoteEditor key="rich" initialMarkdown={content} onChange={save} onReady={onReady} projectId={projectId} notePath={path} />
           ))}
       </div>
     </div>

@@ -3,6 +3,7 @@ import {
   ArrowLeftIcon,
   BookOpenIcon,
   LibraryBigIcon,
+  QuoteIcon,
   WaypointsIcon,
   UploadIcon,
   CodeIcon,
@@ -51,8 +52,9 @@ import { ProjectDialog } from "@/components/project-dialog"
 import { PaperView } from "@/components/papers/paper-view"
 import { CanvasView } from "@/components/canvas/canvas-view"
 import { KnowledgeView } from "@/components/knowledge/knowledge-view"
+import { ReferencesView } from "@/components/references/references-view"
 import { api, type NoteFile, type Project, type PublicSettings, type Source } from "@/lib/api"
-import { navigate } from "@/lib/router"
+import { navigate, type View } from "@/lib/router"
 import { useNote } from "@/hooks/use-note"
 import { cn } from "@/lib/utils"
 
@@ -60,7 +62,7 @@ interface Props {
   projectId: string
   notePath?: string
   paperId?: string
-  view?: "canvas" | "knowledge"
+  view?: View
   kbPage?: string
   settings: PublicSettings
   onOpenSettings: () => void
@@ -262,6 +264,14 @@ export function ProjectPage({ projectId, notePath, paperId, view, kbPage, settin
                     <LibraryBigIcon /> Knowledge base
                   </SidebarMenuButton>
                 </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    isActive={view === "references"}
+                    onClick={() => navigate({ name: "project", projectId, view: "references" })}
+                  >
+                    <QuoteIcon /> References
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
@@ -370,6 +380,14 @@ export function ProjectPage({ projectId, notePath, paperId, view, kbPage, settin
           <div className="flex min-w-0 flex-1 flex-col">
             {view === "canvas" ? (
               <CanvasView projectId={projectId} chatOpen={chatOpen} onToggleChat={() => setChatOpen((o) => !o)} />
+            ) : view === "references" ? (
+              <ReferencesView
+                projectId={projectId}
+                notes={allNotes}
+                papers={papers}
+                chatOpen={chatOpen}
+                onToggleChat={() => setChatOpen((o) => !o)}
+              />
             ) : view === "knowledge" ? (
               <KnowledgeView
                 projectId={projectId}
@@ -599,7 +617,7 @@ function NotePane({
             (source ? (
               <SourceEditor key="src" initialMarkdown={content} onChange={save} />
             ) : (
-              <NoteEditor key="rich" initialMarkdown={content} onChange={save} />
+              <NoteEditor key="rich" initialMarkdown={content} onChange={save} projectId={projectId} notePath={path} />
             ))}
         </div>
       </div>

@@ -15,6 +15,7 @@ import { mentorPrompt } from "./mentor.ts"
 import * as sources from "./sources.ts"
 import * as knowledge from "./knowledge.ts"
 import * as canvas from "./canvas.ts"
+import * as references from "./references.ts"
 import { backgroundModel } from "./ai.ts"
 
 const PORT = Number(process.env.RP_PORT ?? 5174)
@@ -129,6 +130,14 @@ api.post("/projects/:id/sources", async (c) => {
   if (!(file instanceof File)) throw new HttpError(400, "No file uploaded")
   const bytes = new Uint8Array(await file.arrayBuffer())
   const src = await sources.addPdf(c.req.param("id"), file.name, bytes)
+  // If the PDF has a DOI, add it to the references too (in the background; needs the internet).
+  if (src.hasText) {
+    const pid = c.req.param("id")
+    sources
+      .sourceText(pid, src.id)
+      .then((text) => references.fromPaper(pid, src.id, text))
+      .catch(() => {})
+  }
   // File it into the knowledge base in the background, if a model is set up.
   const settings = await readSettings()
   if (src.hasText && settings.defaultModel && settings.providers[settings.defaultModel.provider]?.apiKey) {
@@ -272,6 +281,42 @@ api.post("/projects/:id/canvas/think", async (c) => {
   const { removed: _r, ...rest } = await canvas.think(c.req.param("id"))
   return c.json(rest)
 })
+
+// ---------- references and citations ----------
+api.get("/projects/:id/references", async (c) => c.json(await references.list(c.req.param("id"))))
+api.post("/projects/:id/references", async (c) => {
+  const body = z.object({ text: z.string().max(2_000_000) }).parse(await c.req.json())
+  const id = c.req.param("id")
+  const { items, candidates } = await references.parse(body.text)
+  if (!items.length) return c.json({ added: [], existing: [], candidates: candidates ?? [] })
+  return c.json(await references.addItems(id, items))
+})
+api.post("/projects/:id/references/items", async (c) => {
+  const body = z.object({ items: z.array(z.record(z.string(), z.unknown())).max(5000) }).parse(await c.req.json())
+  return c.json(await references.addItems(c.req.param("id"), body.items, { keepIds: true }))
+})
+api.patch("/projects/:id/references/:rid", async (c) => {
+  const body = z.record(z.string(), z.unknown()).parse(await c.req.json())
+  return c.json(await references.update(c.req.param("id"), c.req.param("rid"), body as Partial<references.Reference>))
+})
+api.delete("/projects/:id/references/:rid", async (c) => c.json(await references.remove(c.req.param("id"), c.req.param("rid"))))
+api.post("/projects/:id/references/render", async (c) => {
+  const body = z
+    .object({
+      style: z.string().max(200).default("apa"),
+      format: z.enum(["bibliography", "citation", "bibtex", "ris", "csljson"]),
+      output: z.enum(["html", "text"]).optional(),
+      ids: z.array(z.string()).optional(),
+      notePath: z.string().optional(),
+      lang: z.string().max(20).optional(),
+    })
+    .parse(await c.req.json())
+  const id = c.req.param("id")
+  let ids = body.ids
+  if (body.notePath) ids = references.citedKeys(await projects.readNote(id, body.notePath))
+  return c.json({ text: await references.render(id, { ...body, ids }), ids })
+})
+api.get("/citation-styles", async (c) => c.json(await references.findStyles(c.req.query("q") ?? "")))
 
 // ---------- chat ----------
 api.get("/projects/:id/chats", async (c) =>

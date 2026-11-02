@@ -187,6 +187,15 @@ export function CodeLeaf(props: PlateLeafProps) {
   )
 }
 
+/** A citation like [@walker2002practice], so it reads as a reference rather than plain text. */
+export function CitationLeaf(props: PlateLeafProps) {
+  return (
+    <PlateLeaf {...props} className="rounded-sm bg-muted px-0.5 font-sans text-[0.88em] text-muted-foreground">
+      {props.children}
+    </PlateLeaf>
+  )
+}
+
 export function HighlightLeaf(props: PlateLeafProps) {
   return (
     <PlateLeaf {...props} as="mark" className="rounded-sm bg-highlight/70 px-0.5 text-inherit">

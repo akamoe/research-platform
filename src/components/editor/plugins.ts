@@ -1,4 +1,4 @@
-import { KEYS } from "platejs"
+import { KEYS, TextApi, type DecoratedRange } from "platejs"
 import { ParagraphPlugin, createPlatePlugin } from "platejs/react"
 import {
   BlockquoteRules,
@@ -74,6 +74,31 @@ const imageRule: MdNodeParser<"img"> = {
     } as unknown as ReturnType<NonNullable<MdNodeParser<"img">["serialize"]>>
   },
 }
+
+/**
+ * The markdown writer escapes "[" so "[@key]" would be saved as "\\[@key]", which pandoc and
+ * other citation tools read as plain text. Keep citations unescaped on disk.
+ */
+export const unescapeCitations = (md: string) => md.replace(/\\\[(?=[^\]\n]*@[\w:.-]+[^\]\n]*\])/g, "[")
+
+/** Shows pandoc-style citations ([@key], [@a; @b, p. 4]) as small chips. Decoration only: the markdown is unchanged. */
+export const CITATION_RE = /\[[^\]\n]*@[\w:.-]+[^\]\n]*\]/g
+const CitationPlugin = createPlatePlugin({
+  key: "citation",
+  node: { isLeaf: true, isDecoration: true },
+  decorate: ({ entry: [node, path], type }) => {
+    if (!TextApi.isText(node)) return []
+    const ranges: DecoratedRange[] = []
+    for (const m of node.text.matchAll(CITATION_RE)) {
+      ranges.push({
+        anchor: { path, offset: m.index },
+        focus: { path, offset: m.index + m[0].length },
+        [type]: true,
+      } as DecoratedRange)
+    }
+    return ranges
+  },
+}).withComponent(N.CitationLeaf)
 
 /** A highlight or capture copied from a PDF pastes as a quote or figure with its link back. */
 const HighlightPastePlugin = createPlatePlugin({ key: "highlightPaste" }).overrideEditor(
@@ -163,4 +188,5 @@ export const editorPlugins = [
     },
   }),
   HighlightPastePlugin,
+  CitationPlugin,
 ]

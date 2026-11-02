@@ -522,7 +522,12 @@ function NotePane({
     saveNote(md)
     const heading = headingOf(md)
     const name = baseName(pathRef.current)
-    if (!follows.current || !heading || heading === name || heading === name.replace(/ \d+$/, "")) return
+    if (!follows.current || !heading || heading === name || heading === name.replace(/ \d+$/, "")) {
+      // The heading went away or back to the current name: drop a rename that's still waiting.
+      window.clearTimeout(renameTimer.current)
+      pendingName.current = null
+      return
+    }
     pendingName.current = heading
     window.clearTimeout(renameTimer.current)
     renameTimer.current = window.setTimeout(renameToHeading, 800)

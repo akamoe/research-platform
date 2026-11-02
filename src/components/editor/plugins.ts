@@ -124,11 +124,15 @@ export const editorPlugins = [
       BoldRules.markdown({ variant: "_" }),
       MarkComboRules.markdown({ variant: "boldItalic" }),
     ],
+    shortcuts: { toggle: { keys: "mod+b" } },
   }),
-  ItalicPlugin.configure({ inputRules: [ItalicRules.markdown({ variant: "*" }), ItalicRules.markdown({ variant: "_" })] }),
+  ItalicPlugin.configure({
+    inputRules: [ItalicRules.markdown({ variant: "*" }), ItalicRules.markdown({ variant: "_" })],
+    shortcuts: { toggle: { keys: "mod+i" } },
+  }),
   UnderlinePlugin,
-  StrikethroughPlugin.configure({ inputRules: [StrikethroughRules.markdown()] }),
-  CodePlugin.configure({ inputRules: [CodeRules.markdown()], node: { component: N.CodeLeaf } }),
+  StrikethroughPlugin.configure({ inputRules: [StrikethroughRules.markdown()], shortcuts: { toggle: { keys: "mod+shift+x" } } }),
+  CodePlugin.configure({ inputRules: [CodeRules.markdown()], node: { component: N.CodeLeaf }, shortcuts: { toggle: { keys: "mod+e" } } }),
   HighlightPlugin.configure({
     inputRules: [HighlightRules.markdown({ variant: "==" })],
     node: { component: N.HighlightLeaf },

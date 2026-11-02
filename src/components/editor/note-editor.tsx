@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react"
 import { Plate, PlateContent, usePlateEditor } from "platejs/react"
 import { MarkdownPlugin } from "@platejs/markdown"
 import { editorPlugins } from "./plugins"
+import { EditorToolbar } from "./toolbar"
 
 /** Lets the paper view drop quotes and figures into the note. */
 export interface NoteInserter {
@@ -61,6 +62,7 @@ export function NoteEditor({ initialMarkdown, onChange, onReady }: Props) {
         timer.current = window.setTimeout(flush, 600)
       }}
     >
+      <EditorToolbar className="sticky top-0 z-10 -mx-2 mb-4 border-b bg-background/95 px-1 py-1.5 backdrop-blur" />
       <PlateContent
         className="min-h-[60vh] pb-[30vh] font-serif text-[17px] leading-[1.75] outline-none [&_strong]:font-semibold"
         placeholder="Start writing. Markdown works: # heading, - list, > quote, **bold**"

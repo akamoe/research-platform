@@ -20,6 +20,21 @@ function modelsFor(id: ProviderId) {
   }
   return cache.get(id)!
 }
+/** The model the student last picked (chat, summaries and the knowledge base share it), if its provider still has a key. */
+export function savedModel(settings: PublicSettings): ModelChoice | null {
+  let m: ModelChoice | null = settings.defaultModel
+  try {
+    m = JSON.parse(localStorage.getItem("rp-model") ?? "null") ?? m
+  } catch {}
+  return m && settings.providers.some((p) => p.id === m.provider && p.configured) ? m : null
+}
+
+/** Remember a picked model here and on the server, where background work reads it. */
+export function rememberModel(m: ModelChoice) {
+  localStorage.setItem("rp-model", JSON.stringify(m))
+  return api.setDefaultModel(m.provider, m.model)
+}
+
 export function clearModelCache() {
   cache.clear()
 }

@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { api, streamChat, type ChatMessage, type ChatMeta, type PublicSettings } from "@/lib/api"
-import { ModelPicker, type ModelChoice } from "./model-picker"
+import { ModelPicker, rememberModel, savedModel, type ModelChoice } from "./model-picker"
 import { ChatSources, SourceCite, parseSourceLink } from "./source-cite"
 
 interface Props {
@@ -28,13 +28,7 @@ export function ChatPanel({ projectId, settings, openNotePath, source, onClose, 
   const [useNote, setUseNote] = useState(true)
   const [history, setHistory] = useState<ChatMeta[]>([])
   const [pickerOpen, setPickerOpen] = useState(false)
-  const [model, setModel] = useState<ModelChoice | null>(() => {
-    try {
-      const saved = JSON.parse(localStorage.getItem("rp-model") ?? "null")
-      if (saved) return saved
-    } catch {}
-    return settings.defaultModel
-  })
+  const [model, setModel] = useState<ModelChoice | null>(() => savedModel(settings))
   // Forget a model whose provider no longer has a key.
   const usable = model && settings.providers.some((p) => p.id === model.provider && p.configured) ? model : null
   const abort = useRef<AbortController | null>(null)
@@ -63,8 +57,7 @@ export function ChatPanel({ projectId, settings, openNotePath, source, onClose, 
 
   const chooseModel = (m: ModelChoice) => {
     setModel(m)
-    localStorage.setItem("rp-model", JSON.stringify(m))
-    api.setDefaultModel(m.provider, m.model).catch(() => {})
+    rememberModel(m).catch(() => {})
   }
 
   const send = async () => {

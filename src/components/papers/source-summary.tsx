@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { api, type KbPage, type PublicSettings, type Source } from "@/lib/api"
 import { openSourceAt } from "@/lib/jump"
 import { navigate } from "@/lib/router"
+import { ModelPicker, rememberModel, savedModel, type ModelChoice } from "@/components/chat/model-picker"
 import { sourceType } from "./source-kind"
 
 /**
@@ -28,6 +29,9 @@ export function SourceSummary({
   const [running, setRunning] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loaded, setLoaded] = useState(false)
+  const [model, setModel] = useState<ModelChoice | null>(() => savedModel(settings))
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const anyKey = settings.providers.some((p) => p.configured)
 
   const load = useCallback(
     () =>
@@ -57,7 +61,10 @@ export function SourceSummary({
   }, [running, load])
 
   const summarize = async () => {
+    if (!model) return setPickerOpen(true)
     try {
+      // The server reads the model from settings, so make sure it has the one shown here.
+      await rememberModel(model)
       await api.ingest(projectId, [source.id])
       setRunning(true)
       setError(null)
@@ -141,13 +148,16 @@ export function SourceSummary({
             A short summary with the key claims, methods, limitations and open questions. It also goes into the knowledge base.
           </p>
           {error && <p className="max-w-xs text-xs text-destructive">Last try failed: {error}</p>}
-          {settings.defaultModel ? (
-            <Button size="sm" onClick={summarize}>
-              <SparklesIcon /> Summarize
-            </Button>
+          {anyKey ? (
+            <div className="flex items-center gap-1">
+              <ModelPicker settings={settings} value={model} onChange={setModel} open={pickerOpen} onOpenChange={setPickerOpen} />
+              <Button size="sm" onClick={summarize}>
+                <SparklesIcon /> Summarize
+              </Button>
+            </div>
           ) : (
             <Button size="sm" variant="outline" onClick={onOpenSettings}>
-              Choose a model first
+              Add an API key in Settings
             </Button>
           )}
         </>

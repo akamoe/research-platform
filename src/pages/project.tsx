@@ -86,6 +86,8 @@ export function ProjectPage({ projectId, notePath, paperId, view, kbPage, settin
     null | { kind: "project" } | { kind: "note"; path: string } | { kind: "paper"; id: string }
   >(null)
   const [chatOpen, setChatOpen] = useState(() => localStorage.getItem("rp-chat-open") === "1")
+  const [chatWidth, setChatWidth] = useState(() => clampChat(Number(localStorage.getItem("rp-chat-width")) || CHAT_WIDTH))
+  useEffect(() => localStorage.setItem("rp-chat-width", String(Math.round(chatWidth))), [chatWidth])
   const [searching, setSearching] = useState(false)
   const [addingSource, setAddingSource] = useState(false)
 
@@ -451,7 +453,11 @@ export function ProjectPage({ projectId, notePath, paperId, view, kbPage, settin
             )}
           </div>
           {chatOpen && (view || !paperId) && (
-            <aside className="w-[380px] shrink-0 border-l bg-background max-lg:absolute max-lg:inset-y-0 max-lg:right-0 max-lg:z-20 max-lg:shadow-xl">
+            <aside
+              style={{ width: chatWidth }}
+              className="relative shrink-0 border-l bg-background max-lg:absolute max-lg:inset-y-0 max-lg:right-0 max-lg:z-20 max-lg:shadow-xl"
+            >
+              <ChatResizer width={chatWidth} onResize={setChatWidth} />
               <ChatPanel
                 projectId={projectId}
                 settings={settings}
@@ -650,5 +656,44 @@ function NotePane({
         </div>
       </div>
     </>
+  )
+}
+
+const CHAT_WIDTH = 380
+const clampChat = (w: number) => Math.min(Math.max(w, 300), Math.max(300, window.innerWidth * 0.6))
+
+/** Drag the chat's left edge to resize it; double-click to reset. Arrow keys work when focused. */
+function ChatResizer({ width, onResize }: { width: number; onResize: (w: number) => void }) {
+  const start = (e: React.PointerEvent) => {
+    e.preventDefault()
+    const x0 = e.clientX
+    const w0 = width
+    const move = (ev: PointerEvent) => onResize(clampChat(w0 + x0 - ev.clientX))
+    const up = () => {
+      window.removeEventListener("pointermove", move)
+      window.removeEventListener("pointerup", up)
+      document.body.style.removeProperty("cursor")
+      document.body.style.removeProperty("user-select")
+    }
+    document.body.style.cursor = "col-resize"
+    document.body.style.userSelect = "none"
+    window.addEventListener("pointermove", move)
+    window.addEventListener("pointerup", up)
+  }
+  return (
+    <div
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="Resize chat"
+      aria-valuenow={Math.round(width)}
+      tabIndex={0}
+      onPointerDown={start}
+      onDoubleClick={() => onResize(CHAT_WIDTH)}
+      onKeyDown={(e) => {
+        if (e.key === "ArrowLeft") onResize(clampChat(width + 24))
+        else if (e.key === "ArrowRight") onResize(clampChat(width - 24))
+      }}
+      className="absolute inset-y-0 -left-1 z-30 w-2 cursor-col-resize outline-none after:absolute after:inset-y-0 after:left-1/2 after:w-px after:-translate-x-1/2 after:transition-colors hover:after:bg-ring focus-visible:after:bg-ring"
+    />
   )
 }

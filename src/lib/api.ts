@@ -36,6 +36,27 @@ export interface Source {
   pages: number
   notePath: string
   hasText: boolean
+  /** False when the student left this paper out of the project chat. */
+  inChat?: boolean
+}
+export interface SearchHit {
+  kind: "source" | "note"
+  /** Paper id, or note path. */
+  ref: string
+  title: string
+  page: number
+  chunk: number
+  score: number
+  /** Matched words are wrapped in « ». */
+  snippet: string
+}
+export interface Passage {
+  kind: "source" | "note"
+  ref: string
+  title: string
+  page: number
+  chunk: number
+  text: string
 }
 export type HighlightColor = "yellow" | "green" | "blue" | "red" | "purple"
 export interface PdfRect {
@@ -237,6 +258,12 @@ export const api = {
   },
   renameSource: (id: string, sid: string, title: string) =>
     request<Source>(`/projects/${id}/sources/${sid}`, json("PATCH", { title })),
+  setSourceInChat: (id: string, sid: string, inChat: boolean) =>
+    request<Source>(`/projects/${id}/sources/${sid}`, json("PATCH", { inChat })),
+  search: (id: string, q: string, limit = 30) =>
+    request<SearchHit[]>(`/projects/${id}/search?q=${encodeURIComponent(q)}&limit=${limit}`),
+  passage: (id: string, sid: string, page: number, chunk: number) =>
+    request<Passage>(`/projects/${id}/sources/${sid}/passage?page=${page}&chunk=${chunk}`),
   deleteSource: (id: string, sid: string) => request(`/projects/${id}/sources/${sid}`, { method: "DELETE" }),
   pdfUrl: (id: string, sid: string) => `/api/projects/${id}/sources/${sid}/pdf`,
   highlights: (id: string, sid: string) => request<Highlight[]>(`/projects/${id}/sources/${sid}/highlights`),

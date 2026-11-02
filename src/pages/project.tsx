@@ -4,6 +4,7 @@ import {
   BookOpenIcon,
   LibraryBigIcon,
   QuoteIcon,
+  SearchIcon,
   WaypointsIcon,
   UploadIcon,
   CodeIcon,
@@ -53,6 +54,7 @@ import { PaperView } from "@/components/papers/paper-view"
 import { CanvasView } from "@/components/canvas/canvas-view"
 import { KnowledgeView } from "@/components/knowledge/knowledge-view"
 import { ReferencesView } from "@/components/references/references-view"
+import { SearchDialog } from "@/components/search/search-dialog"
 import { api, type NoteFile, type Project, type PublicSettings, type Source } from "@/lib/api"
 import { navigate, type View } from "@/lib/router"
 import { useNote } from "@/hooks/use-note"
@@ -83,6 +85,7 @@ export function ProjectPage({ projectId, notePath, paperId, view, kbPage, settin
     null | { kind: "project" } | { kind: "note"; path: string } | { kind: "paper"; id: string }
   >(null)
   const [chatOpen, setChatOpen] = useState(() => localStorage.getItem("rp-chat-open") === "1")
+  const [searching, setSearching] = useState(false)
 
   // A note keeps its editor when it's renamed, so typing isn't interrupted; any other note gets a fresh one.
   const renamedTo = useRef<string | null>(null)
@@ -136,6 +139,10 @@ export function ProjectPage({ projectId, notePath, paperId, view, kbPage, settin
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "j") {
         e.preventDefault()
         setChatOpen((o) => !o)
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault()
+        setSearching((o) => !o)
       }
     }
     window.addEventListener("keydown", onKey)
@@ -248,6 +255,12 @@ export function ProjectPage({ projectId, notePath, paperId, view, kbPage, settin
           <SidebarGroup>
             <SidebarGroupContent>
               <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton onClick={() => setSearching(true)}>
+                    <SearchIcon /> Search
+                    <kbd className="ml-auto font-sans text-xs text-muted-foreground">{navigator.platform.startsWith("Mac") ? "⌘K" : "Ctrl K"}</kbd>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
                 <SidebarMenuItem>
                   <SidebarMenuButton
                     isActive={view === "canvas"}
@@ -475,6 +488,7 @@ export function ProjectPage({ projectId, notePath, paperId, view, kbPage, settin
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      <SearchDialog projectId={projectId} open={searching} onOpenChange={setSearching} />
     </SidebarProvider>
   )
 }

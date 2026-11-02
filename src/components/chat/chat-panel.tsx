@@ -8,6 +8,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { api, streamChat, type ChatMessage, type ChatMeta, type PublicSettings } from "@/lib/api"
 import { ModelPicker, type ModelChoice } from "./model-picker"
+import { ChatSources, SourceCite, parseSourceLink } from "./source-cite"
 
 interface Props {
   projectId: string
@@ -44,11 +45,21 @@ export function ChatPanel({ projectId, settings, openNotePath, source, onClose, 
     bottom.current?.scrollIntoView({ block: "end" })
   }, [messages])
 
-  // A paper's chat picks up where the student left off.
+  // A paper's chat picks up where the student left off; so does the project chat after opening a paper.
+  const lastKey = `rp-chat:${projectId}`
   useEffect(() => {
-    if (!source) return
+    if (!source) {
+      const last = sessionStorage.getItem(lastKey)
+      if (last) openChat(last)
+      return
+    }
     api.chats(projectId, source.id).then((list) => list[0] && openChat(list[0].id), () => {})
   }, [projectId, source?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (source) return
+    if (chatId) sessionStorage.setItem(lastKey, chatId)
+    else sessionStorage.removeItem(lastKey)
+  }, [chatId, source, lastKey])
 
   const chooseModel = (m: ModelChoice) => {
     setModel(m)
@@ -108,7 +119,8 @@ export function ChatPanel({ projectId, settings, openNotePath, source, onClose, 
       setMessages(c.messages)
       setChatId(c.id)
     } catch (err) {
-      toast.error((err as Error).message)
+      if (id === sessionStorage.getItem(lastKey)) sessionStorage.removeItem(lastKey)
+      else toast.error((err as Error).message)
     }
   }
 
@@ -194,8 +206,9 @@ export function ChatPanel({ projectId, settings, openNotePath, source, onClose, 
               <>
                 <p className="font-medium text-foreground">Think out loud here.</p>
                 <p>
-                  Ask questions, test an argument, or get feedback on what you've written. The assistant will
-                  challenge and explain, but it won't write your paper for you.
+                  Ask about your papers, test an argument, or get feedback on what you've written. Answers link to
+                  the pages they draw on. The assistant will challenge and explain, but it won't write your paper for
+                  you.
                 </p>
               </>
             )}
@@ -210,7 +223,23 @@ export function ChatPanel({ projectId, settings, openNotePath, source, onClose, 
               ) : (
                 <div key={i} className="prose prose-sm max-w-none text-sm dark:prose-invert prose-p:my-2 prose-pre:bg-muted prose-pre:text-foreground">
                   {m.content ? (
-                    <Markdown remarkPlugins={[remarkGfm]}>{m.content}</Markdown>
+                    <Markdown
+                      remarkPlugins={[remarkGfm]}
+                      components={{
+                        a: ({ href, children }) =>
+                          parseSourceLink(href) ? (
+                            <SourceCite projectId={projectId} href={href!}>
+                              {children}
+                            </SourceCite>
+                          ) : (
+                            <a href={href} target="_blank" rel="noreferrer">
+                              {children}
+                            </a>
+                          ),
+                      }}
+                    >
+                      {m.content}
+                    </Markdown>
                   ) : (
                     <span className="inline-block size-2 animate-pulse rounded-full bg-muted-foreground" />
                   )}
@@ -237,7 +266,8 @@ export function ChatPanel({ projectId, settings, openNotePath, source, onClose, 
             placeholder={source ? "Ask about this paper…" : "Ask, question, or think out loud…"}
             className="block max-h-48 w-full resize-none bg-transparent px-3 pt-2.5 text-sm outline-none placeholder:text-muted-foreground"
           />
-          <div className="flex items-center gap-1 px-2 pb-2">
+          <div className="flex min-w-0 items-center gap-1 px-2 pb-2">
+            {!source && <ChatSources projectId={projectId} />}
             {openNotePath && (
               <Tooltip>
                 <TooltipTrigger asChild>

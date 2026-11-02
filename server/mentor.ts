@@ -1,4 +1,6 @@
 import type { Project } from "./projects.ts"
+import type { Hit } from "./search.ts"
+import type { Source } from "./sources.ts"
 
 /**
  * The platform's core rule: the AI helps the student think, but never writes the paper.
@@ -12,6 +14,7 @@ export function mentorPrompt(opts: {
   openNote?: { path: string; content: string }
   paper?: { title: string; text: string }
   knowledge?: { index: string; pages: string } | null
+  passages?: { all: Source[]; hits: Hit[] }
 }) {
   const parts = [
     `You are a research mentor inside a student's research workspace. The student is working on the project "${opts.project.name}".`,
@@ -34,6 +37,7 @@ You never write the student's paper, article, thesis, essay or any part of it. T
       : "",
     opts.knowledge ? knowledgeSection(opts.knowledge) : "",
     opts.paper ? paperSection(opts.paper) : "",
+    opts.passages ? passagesSection(opts.passages) : "",
   ]
   return parts.filter(Boolean).join("\n\n")
 }
@@ -55,4 +59,40 @@ The student is reading this paper and wants to discuss it. Answer from the paper
   }
   const cut = paper.text.length > PAPER_CHARS
   return `${intro}\n\n<paper>\n${paper.text.slice(0, PAPER_CHARS)}\n</paper>${cut ? "\n\n(The paper is long; only the first part is included above. Say so if asked about later sections.)" : ""}`
+}
+
+const PASSAGE_CHARS = 18_000
+
+function passagesSection({ all, hits }: { all: Source[]; hits: Hit[] }) {
+  if (!all.length) return ""
+  const list = all.map((s) => `- ${s.title}`).join("\n")
+  let left = PASSAGE_CHARS
+  const chosen: string[] = []
+  for (const h of hits) {
+    const page = h.page ? `, p. ${h.page}` : ""
+    const cite = `[${shortTitle(h.title)}${page}](#src/${h.ref}/${h.page}/${h.chunk})`
+    const block = `<passage paper="${h.title.replace(/"/g, "'")}" page="${h.page || "?"}" cite="${cite}">\n${h.text}\n</passage>`
+    if (block.length > left) break
+    chosen.push(block)
+    left -= block.length
+  }
+  return `## The student's papers
+The student has added these papers to the project and kept them in this chat:
+${list}
+
+${
+  chosen.length
+    ? `Passages from them that match the latest message (found by keyword search, so some may be off-topic):
+${chosen.join("\n\n")}
+
+When you use a passage, cite it right after the claim by copying its cite attribute exactly, as a markdown link, for example ${chosen.length ? (hits[0] ? `[${shortTitle(hits[0].title)}${hits[0].page ? `, p. ${hits[0].page}` : ""}](#src/${hits[0].ref}/${hits[0].page}/${hits[0].chunk})` : "") : ""}. The student can click it to see the passage and open the PDF there. Only cite what a passage actually says. If the passages don't answer the question, say that the papers you were shown don't cover it, and suggest what to search for or read.`
+    : "No passage matched the latest message by keyword. If the question is about the papers, say you couldn't find it in them and ask the student to name the paper or use different words."
+}`
+}
+
+function shortTitle(title: string) {
+  const t = title.replace(/\s+/g, " ").replace(/"/g, "'").replace(/\[/g, "(").replace(/\]/g, ")").trim()
+  if (t.length <= 40) return t
+  const cut = t.slice(0, 40)
+  return `${cut.slice(0, Math.max(cut.lastIndexOf(" "), 25))}…`
 }

@@ -16,6 +16,7 @@ import * as sources from "./sources.ts"
 import * as knowledge from "./knowledge.ts"
 import * as canvas from "./canvas.ts"
 import * as references from "./references.ts"
+import * as search from "./search.ts"
 import { backgroundModel } from "./ai.ts"
 
 const PORT = Number(process.env.RP_PORT ?? 5174)
@@ -192,8 +193,8 @@ api.get("/projects/:id/sources/:sid/assets/:file", async (c) => {
   return c.body(data, 200, { "Content-Type": "image/png", "Cache-Control": "private, max-age=86400" })
 })
 api.patch("/projects/:id/sources/:sid", async (c) => {
-  const body = z.object({ title: z.string() }).parse(await c.req.json())
-  return c.json(await sources.renameSource(c.req.param("id"), c.req.param("sid"), body.title))
+  const body = z.object({ title: z.string().optional(), inChat: z.boolean().optional() }).parse(await c.req.json())
+  return c.json(await sources.updateSource(c.req.param("id"), c.req.param("sid"), body))
 })
 api.delete("/projects/:id/sources/:sid", async (c) => {
   await sources.deleteSource(c.req.param("id"), c.req.param("sid"))
@@ -318,6 +319,19 @@ api.post("/projects/:id/references/render", async (c) => {
 })
 api.get("/citation-styles", async (c) => c.json(await references.findStyles(c.req.query("q") ?? "")))
 
+// ---------- search ----------
+api.get("/projects/:id/search", async (c) => {
+  const q = (c.req.query("q") ?? "").slice(0, 500)
+  const limit = Math.min(60, Number(c.req.query("limit")) || 30)
+  const hits = await search.search(c.req.param("id"), q, { limit })
+  return c.json(hits.map(({ text: _t, ...h }) => h))
+})
+api.get("/projects/:id/sources/:sid/passage", async (c) => {
+  const p = await search.passage(c.req.param("id"), c.req.param("sid"), Number(c.req.query("page")) || 0, Number(c.req.query("chunk")) || 0)
+  if (!p) throw new HttpError(404, "Passage not found")
+  return c.json(p)
+})
+
 // ---------- chat ----------
 api.get("/projects/:id/chats", async (c) =>
   c.json(await projects.listChats(c.req.param("id"), c.req.query("source") || undefined)),
@@ -363,13 +377,23 @@ api.post("/projects/:id/chat", async (c) => {
   }
   const lastQuestion = [...body.messages].reverse().find((m) => m.role === "user")?.content ?? ""
   const memory = await knowledge.contextFor(id, `${lastQuestion} ${paper?.title ?? ""}`)
+  // The project chat answers from passages of every paper the student kept in chat.
+  let passages: { all: sources.Source[]; hits: search.Hit[] } | undefined
+  if (!paper) {
+    const all = (await sources.listSources(id)).filter((s) => s.hasText)
+    const included = all.filter((s) => s.inChat !== false).map((s) => s.id)
+    // The last two questions, so follow-ups like "and the second study?" still find the right passages.
+    const recent = body.messages.filter((m) => m.role === "user").slice(-2).map((m) => m.content).join(" ")
+    const hits = included.length ? await search.search(id, recent, { kinds: ["source"], sourceIds: included, limit: 10 }) : []
+    passages = { all: all.filter((s) => included.includes(s.id)), hits }
+  }
   const settings = await readSettings()
   const controller = new AbortController()
   const gen = streamChat({
     settings,
     provider,
     model: body.model,
-    system: mentorPrompt({ project, noteTitles: notes.map((n) => n.path), openNote, paper, knowledge: memory }),
+    system: mentorPrompt({ project, noteTitles: notes.map((n) => n.path), openNote, paper, knowledge: memory, passages }),
     messages: body.messages,
     signal: controller.signal,
   })

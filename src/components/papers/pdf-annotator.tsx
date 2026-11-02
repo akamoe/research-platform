@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { api, type Highlight, type HighlightColor, type PdfRect, type Source } from "@/lib/api"
 import { cn } from "@/lib/utils"
+import { takePendingPage, type PageTarget } from "@/lib/jump"
 
 const COLORS: { id: HighlightColor; fill: string; dot: string; emoji: string }[] = [
   { id: "yellow", fill: "rgba(250, 204, 21, 0.38)", dot: "#facc15", emoji: "🟡" },
@@ -218,6 +219,32 @@ function Annotator({ docId, projectId, source, onInsert }: Props & { docId: stri
       deliver(saved, ev.blob)
     })
   }, [capture, projectId, source, color, deliver])
+
+  // Search results and chat citations open the paper at a page.
+  // `scroll` changes identity between renders, so read it through a ref instead of re-running this.
+  const scrollRef = useRef(scroll)
+  scrollRef.current = scroll
+  useEffect(() => {
+    const timers: number[] = []
+    const jump = (t: PageTarget, behavior: "smooth" | "instant") => {
+      if (t.page > 0) scrollRef.current?.scrollToPage({ pageNumber: t.page, behavior })
+    }
+    // A freshly opened PDF settles its layout over the first second and can reset to page 1;
+    // jump a few times while it does.
+    const first = takePendingPage(source.id)
+    if (first) for (const ms of [120, 400, 900]) timers.push(window.setTimeout(() => jump(first, "instant"), ms))
+    const on = (e: Event) => {
+      const t = (e as CustomEvent<PageTarget>).detail
+      if (t.sourceId !== source.id) return
+      takePendingPage(source.id)
+      jump(t, "smooth")
+    }
+    window.addEventListener("rp:goto-page", on)
+    return () => {
+      timers.forEach((x) => window.clearTimeout(x))
+      window.removeEventListener("rp:goto-page", on)
+    }
+  }, [source.id])
 
   // Clicking a quote or figure in the note scrolls here and flashes it.
   useEffect(() => {

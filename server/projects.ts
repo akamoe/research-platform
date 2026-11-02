@@ -1,7 +1,7 @@
 import fs from "node:fs/promises"
 import path from "node:path"
 import crypto from "node:crypto"
-import { HttpError, PROJECTS_DIR, TRASH_DIR, safeJoin } from "./paths.ts"
+import { HttpError, PROJECTS_DIR, TRASH_DIR, safeJoin, writeFileAtomic } from "./paths.ts"
 
 export interface Project {
   id: string
@@ -56,7 +56,7 @@ export async function getProject(id: string): Promise<Project> {
 
 async function saveProject(p: Project) {
   const { id, ...rest } = p
-  await fs.writeFile(path.join(projectDir(id), "project.json"), JSON.stringify(rest, null, 2))
+  await writeFileAtomic(path.join(projectDir(id), "project.json"), JSON.stringify(rest, null, 2))
 }
 
 export async function touchProject(id: string) {

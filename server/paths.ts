@@ -1,3 +1,4 @@
+import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 
@@ -24,4 +25,11 @@ export class HttpError extends Error {
     super(message)
     this.status = status
   }
+}
+
+/** Writes through a temporary file and a rename, so a reader never sees a half-written file. */
+export async function writeFileAtomic(file: string, data: string) {
+  const tmp = `${file}.${process.pid}.${Math.random().toString(36).slice(2)}.tmp`
+  await fs.writeFile(tmp, data)
+  await fs.rename(tmp, file)
 }

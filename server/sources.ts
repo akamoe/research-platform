@@ -2,7 +2,7 @@ import fs from "node:fs/promises"
 import path from "node:path"
 import crypto from "node:crypto"
 import { extractText, getDocumentProxy, getMeta } from "unpdf"
-import { HttpError, PROJECTS_DIR, TRASH_DIR, safeJoin } from "./paths.ts"
+import { HttpError, PROJECTS_DIR, TRASH_DIR, safeJoin, writeFileAtomic } from "./paths.ts"
 import { createNote, getProject, touchProject } from "./projects.ts"
 
 /** A paper the student added. The PDF, its extracted text and this record sit side by side in `sources/`. */
@@ -16,6 +16,8 @@ export interface Source {
   notePath: string
   /** False when the PDF has no text layer (e.g. a scan), so chat can't read it. */
   hasText: boolean
+  /** False when the student left this paper out of the project chat. Missing means included. */
+  inChat?: boolean
 }
 
 export const MAX_PDF_BYTES = 200 * 1024 * 1024
@@ -55,7 +57,7 @@ export async function getSource(projectId: string, sourceId: string): Promise<So
 }
 
 async function saveSource(projectId: string, s: Source) {
-  await fs.writeFile(file(projectId, s.id, "json"), JSON.stringify(s, null, 2))
+  await writeFileAtomic(file(projectId, s.id, "json"), JSON.stringify(s, null, 2))
 }
 
 export function pdfPath(projectId: string, sourceId: string) {
@@ -113,10 +115,16 @@ export async function addPdf(projectId: string, fileName: string, bytes: Uint8Ar
   return source
 }
 
-export async function renameSource(projectId: string, sourceId: string, title: string) {
+export async function updateSource(projectId: string, sourceId: string, patch: { title?: string; inChat?: boolean }) {
   const s = await getSource(projectId, sourceId)
-  if (!title.trim()) throw new HttpError(400, "Title is required")
-  s.title = title.trim()
+  if (patch.title !== undefined) {
+    if (!patch.title.trim()) throw new HttpError(400, "Title is required")
+    s.title = patch.title.trim()
+  }
+  if (patch.inChat !== undefined) {
+    if (patch.inChat) delete s.inChat
+    else s.inChat = false
+  }
   await saveSource(projectId, s)
   return s
 }

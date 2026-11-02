@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { CopyIcon, MinusIcon, NotebookPenIcon, PlusIcon, ScanIcon, Trash2Icon } from "lucide-react"
+import { ClipboardCopyIcon, CopyIcon, MinusIcon, NotebookPenIcon, PlusIcon, ScanIcon, Trash2Icon } from "lucide-react"
 import { toast } from "sonner"
 import wasmPath from "@embedpdf/pdfium/pdfium.wasm?url"
 import { createPluginRegistration } from "@embedpdf/core"
@@ -54,6 +54,30 @@ function quoteMarkdown(source: Source, h: Highlight) {
 function figureMarkdown(projectId: string, source: Source, h: Highlight) {
   const url = api.assetUrl(projectId, source.id, h.image!)
   return `![Figure, p. ${h.pageIndex + 1}](${url} "hl/${source.id}/${h.id}")`
+}
+
+/** What a new highlight or capture does: copy it, or put it straight into the note. */
+type Mode = "copy" | "note"
+
+/**
+ * Copies a highlight for pasting into the note. The clipboard write starts inside the
+ * click (Safari requires that), with the content filled in once the highlight is saved.
+ * The note recognises the pasted markdown; other apps get the plain text or the image.
+ */
+async function copyHighlight(markdown: Promise<string>, image?: Blob | Promise<Blob>) {
+  try {
+    const items: Record<string, Promise<Blob> | Blob> = {
+      "text/plain": markdown.then((md) => new Blob([md], { type: "text/plain" })),
+    }
+    if (image) items["image/png"] = image
+    await navigator.clipboard.write([new ClipboardItem(items)])
+    toast.success(image ? "Image copied. Paste it into your note." : "Copied. Paste it into your note.")
+  } catch {
+    // The browser refused (often because the click was too long ago); a fresh click works.
+    const md = await markdown.catch(() => null)
+    if (md === null) return
+    toast("Ready to copy", { action: { label: "Copy", onClick: () => void navigator.clipboard.writeText(md) } })
+  }
 }
 
 interface Props {
@@ -112,6 +136,7 @@ function Annotator({ docId, projectId, source, onInsert }: Props & { docId: stri
   const [color, setColorState] = useState<HighlightColor>(
     () => (localStorage.getItem("rp-hl-color") as HighlightColor) || "yellow",
   )
+  const [mode, setModeState] = useState<Mode>(() => (localStorage.getItem("rp-hl-mode") as Mode) || "copy")
   const [active, setActive] = useState<string | null>(null)
   const [flash, setFlash] = useState<string | null>(null)
   const zoom = useZoom(docId)
@@ -119,6 +144,19 @@ function Annotator({ docId, projectId, source, onInsert }: Props & { docId: stri
   const { provides: scroll } = useScroll(docId)
   const { provides: selection } = useSelectionCapability()
   const { provides: capture, state: captureState } = useCapture(docId)
+
+  const setMode = (m: Mode) => {
+    setModeState(m)
+    localStorage.setItem("rp-hl-mode", m)
+  }
+  /** Sends a saved highlight's markdown to the note or the clipboard, per the mode. */
+  const deliver = useCallback(
+    (markdown: Promise<string>, image?: Blob) => {
+      if (mode === "note") markdown.then(onInsert, () => {})
+      else void copyHighlight(markdown, image)
+    },
+    [mode, onInsert],
+  )
 
   const setColor = (c: HighlightColor) => {
     setColorState(c)
@@ -129,15 +167,15 @@ function Annotator({ docId, projectId, source, onInsert }: Props & { docId: stri
     api.highlights(projectId, source.id).then(setHighlights, (e) => toast.error(e.message))
   }, [projectId, source.id])
 
-  // Text selection -> highlight + quote in the note.
+  // Text selection -> highlight, then the quote goes to the note or the clipboard.
   const highlightSelection = useCallback(
-    async (c: HighlightColor) => {
+    (c: HighlightColor) => {
       if (!selection) return
       const scope = selection.forDocument(docId)
       const parts = scope.getFormattedSelection()
       if (!parts.length) return
       setColor(c)
-      try {
+      const saved = (async () => {
         const text = tidy(await scope.getSelectedText().toPromise())
         const created: Highlight[] = []
         for (const part of parts) {
@@ -152,12 +190,12 @@ function Annotator({ docId, projectId, source, onInsert }: Props & { docId: stri
         }
         scope.clear()
         setHighlights((hs) => [...hs, ...created])
-        onInsert(quoteMarkdown(source, created[0]))
-      } catch (err) {
-        toast.error(`Couldn't save highlight: ${(err as Error).message}`)
-      }
+        return quoteMarkdown(source, created[0])
+      })()
+      saved.catch((err) => toast.error(`Couldn't save highlight: ${(err as Error).message}`))
+      deliver(saved)
     },
-    [selection, docId, projectId, source, onInsert],
+    [selection, docId, projectId, source, deliver],
   )
 
   const copySelection = () => {
@@ -165,26 +203,21 @@ function Annotator({ docId, projectId, source, onInsert }: Props & { docId: stri
     selection?.forDocument(docId).clear()
   }
 
-  // Area capture -> image highlight + figure in the note.
+  // Area capture -> image highlight; the figure goes to the note or the clipboard.
   useEffect(() => {
     if (!capture) return
-    return capture.onCaptureArea(async (ev) => {
-      try {
-        const h = await api.addAreaHighlight(
-          projectId,
-          source.id,
-          { pageIndex: ev.pageIndex, rects: [ev.rect as PdfRect], color },
-          ev.blob,
-        )
-        setHighlights((hs) => [...hs, h])
-        onInsert(figureMarkdown(projectId, source, h))
-      } catch (err) {
-        toast.error(`Couldn't save the capture: ${(err as Error).message}`)
-      } finally {
-        if (capture.isMarqueeCaptureActive()) capture.disableMarqueeCapture()
-      }
+    return capture.onCaptureArea((ev) => {
+      if (capture.isMarqueeCaptureActive()) capture.disableMarqueeCapture()
+      const saved = api
+        .addAreaHighlight(projectId, source.id, { pageIndex: ev.pageIndex, rects: [ev.rect as PdfRect], color }, ev.blob)
+        .then((h) => {
+          setHighlights((hs) => [...hs, h])
+          return figureMarkdown(projectId, source, h)
+        })
+      saved.catch((err) => toast.error(`Couldn't save the capture: ${(err as Error).message}`))
+      deliver(saved, ev.blob)
     })
-  }, [capture, projectId, source, color, onInsert])
+  }, [capture, projectId, source, color, deliver])
 
   // Clicking a quote or figure in the note scrolls here and flashes it.
   useEffect(() => {
@@ -259,7 +292,25 @@ function Annotator({ docId, projectId, source, onInsert }: Props & { docId: stri
               <ScanIcon className="size-3.5" /> {capturing ? "Drag over an area" : "Capture area"}
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Drag a box over a figure or table to add it to your note as an image</TooltipContent>
+          <TooltipContent>Drag a box over a figure or table to keep it as an image</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 gap-1.5 px-2 text-xs text-muted-foreground"
+              onClick={() => setMode(mode === "copy" ? "note" : "copy")}
+            >
+              {mode === "copy" ? <ClipboardCopyIcon className="size-3.5" /> : <NotebookPenIcon className="size-3.5" />}
+              {mode === "copy" ? "Copy" : "Add to note"}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            {mode === "copy"
+              ? "New highlights and captures are copied, so you paste them where you want. Click to add them to the note automatically."
+              : "New highlights and captures go straight into the note. Click to copy them instead."}
+          </TooltipContent>
         </Tooltip>
         <div className="ml-auto flex items-center">
           <Button variant="ghost" size="icon" className="size-7" onClick={() => zoom.provides?.zoomOut()} aria-label="Zoom out">
@@ -319,6 +370,14 @@ function Annotator({ docId, projectId, source, onInsert }: Props & { docId: stri
                         onDelete={() => remove(h)}
                         onAddToNote={() => {
                           onInsert(h.image ? figureMarkdown(projectId, source, h) : quoteMarkdown(source, h))
+                          setActive(null)
+                        }}
+                        onCopy={() => {
+                          const md = h.image ? figureMarkdown(projectId, source, h) : quoteMarkdown(source, h)
+                          const image = h.image
+                            ? fetch(api.assetUrl(projectId, source.id, h.image)).then((r) => r.blob())
+                            : undefined
+                          void copyHighlight(Promise.resolve(md), image)
                           setActive(null)
                         }}
                       />
@@ -383,12 +442,14 @@ function HighlightMenu({
   onColor,
   onDelete,
   onAddToNote,
+  onCopy,
 }: {
   h: Highlight
   scale: number
   onColor: (c: HighlightColor) => void
   onDelete: () => void
   onAddToNote: () => void
+  onCopy: () => void
 }) {
   const r = h.rects[0]
   return (
@@ -407,7 +468,10 @@ function HighlightMenu({
         />
       ))}
       <div className="mx-0.5 h-4 w-px bg-border" />
-      <Button variant="ghost" size="icon" className="size-6" onClick={onAddToNote} aria-label="Add to note again">
+      <Button variant="ghost" size="icon" className="size-6" onClick={onCopy} aria-label="Copy">
+        <ClipboardCopyIcon className="size-3.5" />
+      </Button>
+      <Button variant="ghost" size="icon" className="size-6" onClick={onAddToNote} aria-label="Add to note">
         <NotebookPenIcon className="size-3.5" />
       </Button>
       <Button variant="ghost" size="icon" className="size-6" onClick={onDelete} aria-label="Remove highlight">

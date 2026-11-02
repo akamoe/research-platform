@@ -1,8 +1,9 @@
 import type React from "react"
+import { useRef, useState } from "react"
 import type { TListElement } from "platejs"
 import { isOrderedList } from "@platejs/list"
 import { useTodoListElement, useTodoListElementState } from "@platejs/list/react"
-import { PlateElement, PlateLeaf, type PlateElementProps, type PlateLeafProps, type RenderNodeWrapper } from "platejs/react"
+import { PlateElement, PlateLeaf, useEditorRef, type PlateElementProps, type PlateLeafProps, type RenderNodeWrapper } from "platejs/react"
 import { Checkbox } from "@/components/ui/checkbox"
 import { cn } from "@/lib/utils"
 
@@ -90,19 +91,75 @@ export function LinkElement(props: PlateElementProps) {
 }
 
 export function ImageElement(props: PlateElementProps) {
-  const { url, title, caption } = props.element as { url?: string; title?: string; caption?: { text: string }[] }
+  const editor = useEditorRef()
+  const { url, title, caption, width } = props.element as {
+    url?: string
+    title?: string
+    caption?: { text: string }[]
+    width?: number
+  }
   const alt = caption?.map((c) => c.text).join("") ?? ""
   const jumps = typeof title === "string" && title.startsWith("hl/")
+  const frame = useRef<HTMLDivElement>(null)
+  const [dragWidth, setDragWidth] = useState<number | null>(null)
+  const shown = dragWidth ?? width
+
+  // Drag either side handle to resize; the width is saved in the note's markdown.
+  const startResize = (e: React.PointerEvent, side: 1 | -1) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const box = frame.current
+    if (!box) return
+    const startX = e.clientX
+    const startW = box.getBoundingClientRect().width
+    const maxW = box.parentElement?.clientWidth ?? startW
+    let w = startW
+    const move = (ev: PointerEvent) => {
+      w = Math.round(Math.min(maxW, Math.max(80, startW + (ev.clientX - startX) * side)))
+      setDragWidth(w)
+    }
+    const up = () => {
+      window.removeEventListener("pointermove", move)
+      window.removeEventListener("pointerup", up)
+      setDragWidth(null)
+      const at = editor.api.findPath(props.element)
+      if (at) editor.tf.setNodes({ width: w } as Partial<typeof props.element>, { at })
+    }
+    window.addEventListener("pointermove", move)
+    window.addEventListener("pointerup", up)
+  }
+
   return (
     <PlateElement {...props} className="my-3">
       <div contentEditable={false} className="select-none">
-        <img
-          src={url}
-          alt={alt}
-          onClick={() => jumps && gotoHighlight(title!)}
-          title={jumps ? "Show in the PDF" : alt}
-          className={cn("max-h-[480px] max-w-full rounded-md border", jumps && "cursor-pointer hover:opacity-90")}
-        />
+        <div ref={frame} className="group relative inline-block max-w-full align-top" style={{ width: shown }}>
+          <img
+            src={url}
+            alt={alt}
+            draggable={false}
+            onClick={() => jumps && gotoHighlight(title!)}
+            title={jumps ? "Show in the PDF" : alt}
+            className={cn(
+              "block max-w-full rounded-md border",
+              shown ? "h-auto w-full" : "max-h-[480px]",
+              jumps && "cursor-pointer hover:opacity-90",
+            )}
+          />
+          {([-1, 1] as const).map((side) => (
+            <div
+              key={side}
+              aria-hidden
+              onPointerDown={(e) => startResize(e, side)}
+              className={cn(
+                "absolute top-0 flex h-full w-3 cursor-ew-resize items-center justify-center opacity-0 transition-opacity group-hover:opacity-100",
+                dragWidth !== null && "opacity-100",
+                side === -1 ? "-left-1.5" : "-right-1.5",
+              )}
+            >
+              <div className="h-10 max-h-[60%] w-1.5 rounded-full border border-background bg-foreground/50 shadow-sm" />
+            </div>
+          ))}
+        </div>
       </div>
       {props.children}
     </PlateElement>

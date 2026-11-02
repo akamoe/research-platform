@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import {
   ArrowLeftIcon,
+  BookOpenIcon,
+  UploadIcon,
   CodeIcon,
   FileTextIcon,
   MessageSquareIcon,
@@ -44,22 +46,34 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { ChatPanel } from "@/components/chat/chat-panel"
 import { NoteEditor, SourceEditor } from "@/components/editor/note-editor"
 import { ProjectDialog } from "@/components/project-dialog"
-import { api, type NoteFile, type Project, type PublicSettings } from "@/lib/api"
+import { PaperView } from "@/components/papers/paper-view"
+import { api, type NoteFile, type Project, type PublicSettings, type Source } from "@/lib/api"
 import { navigate } from "@/lib/router"
+import { useNote } from "@/hooks/use-note"
 import { cn } from "@/lib/utils"
 
 interface Props {
   projectId: string
   notePath?: string
+  paperId?: string
   settings: PublicSettings
   onOpenSettings: () => void
 }
 
-export function ProjectPage({ projectId, notePath, settings, onOpenSettings }: Props) {
+export function ProjectPage({ projectId, notePath, paperId, settings, onOpenSettings }: Props) {
   const [project, setProject] = useState<Project | null>(null)
-  const [notes, setNotes] = useState<NoteFile[]>([])
+  const [allNotes, setNotes] = useState<NoteFile[]>([])
+  // Paper notes are opened next to their PDF, so they aren't listed twice.
+  const notes = allNotes.filter((n) => !n.path.startsWith("Papers/"))
+  const [papers, setPapers] = useState<Source[]>([])
+  const [uploading, setUploading] = useState(0)
+  const [dragging, setDragging] = useState(false)
+  const fileInput = useRef<HTMLInputElement>(null)
+  const paper = papers.find((p) => p.id === paperId)
   const [editing, setEditing] = useState(false)
-  const [confirmDelete, setConfirmDelete] = useState<null | { kind: "project" } | { kind: "note"; path: string }>(null)
+  const [confirmDelete, setConfirmDelete] = useState<
+    null | { kind: "project" } | { kind: "note"; path: string } | { kind: "paper"; id: string }
+  >(null)
   const [chatOpen, setChatOpen] = useState(() => localStorage.getItem("rp-chat-open") === "1")
 
   const refreshNotes = useCallback(() => api.notes(projectId).then(setNotes), [projectId])
@@ -67,12 +81,33 @@ export function ProjectPage({ projectId, notePath, settings, onOpenSettings }: P
   useEffect(() => {
     api.project(projectId).then(setProject, () => navigate({ name: "home" }, true))
     refreshNotes().catch(() => {})
+    api.sources(projectId).then(setPapers, () => {})
   }, [projectId, refreshNotes])
 
-  // Open the first note when none is selected.
+  // Open the first note when nothing is selected.
+  const firstNote = notes[0]?.path
   useEffect(() => {
-    if (!notePath && notes.length) navigate({ name: "project", projectId, note: notes[0].path }, true)
-  }, [notePath, notes, projectId])
+    if (!notePath && !paperId && firstNote) navigate({ name: "project", projectId, note: firstNote }, true)
+  }, [notePath, paperId, firstNote, projectId])
+
+  const upload = async (files: File[]) => {
+    const pdfs = files.filter((f) => f.type === "application/pdf" || f.name.toLowerCase().endsWith(".pdf"))
+    if (!pdfs.length) return toast.error("Only PDF files can be added")
+    setUploading((n) => n + pdfs.length)
+    let last: Source | undefined
+    for (const f of pdfs) {
+      try {
+        last = await api.uploadPdf(projectId, f)
+        setPapers((p) => [last!, ...p])
+      } catch (err) {
+        toast.error(`${f.name}: ${(err as Error).message}`)
+      } finally {
+        setUploading((n) => n - 1)
+      }
+    }
+    refreshNotes().catch(() => {})
+    if (last) navigate({ name: "project", projectId, paper: last.id })
+  }
 
   useEffect(() => {
     localStorage.setItem("rp-chat-open", chatOpen ? "1" : "0")
@@ -105,6 +140,10 @@ export function ProjectPage({ projectId, notePath, settings, onOpenSettings }: P
       if (confirmDelete.kind === "project") {
         await api.deleteProject(projectId)
         navigate({ name: "home" })
+      } else if (confirmDelete.kind === "paper") {
+        await api.deleteSource(projectId, confirmDelete.id)
+        setPapers((p) => p.filter((x) => x.id !== confirmDelete.id))
+        if (confirmDelete.id === paperId) navigate({ name: "project", projectId }, true)
       } else {
         await api.deleteNote(projectId, confirmDelete.path)
         const rest = notes.filter((n) => n.path !== confirmDelete.path)
@@ -121,7 +160,42 @@ export function ProjectPage({ projectId, notePath, settings, onOpenSettings }: P
   if (!project) return null
 
   return (
-    <SidebarProvider className="h-full min-h-0">
+    <SidebarProvider
+      className="h-full min-h-0"
+      onDragOver={(e) => {
+        if (e.dataTransfer.types.includes("Files")) {
+          e.preventDefault()
+          setDragging(true)
+        }
+      }}
+      onDragLeave={(e) => e.currentTarget === e.target && setDragging(false)}
+      onDrop={(e) => {
+        e.preventDefault()
+        setDragging(false)
+        upload(Array.from(e.dataTransfer.files))
+      }}
+    >
+      <input
+        ref={fileInput}
+        type="file"
+        accept="application/pdf,.pdf"
+        multiple
+        hidden
+        onChange={(e) => {
+          upload(Array.from(e.target.files ?? []))
+          e.target.value = ""
+        }}
+      />
+      {dragging && (
+        <div
+          className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm"
+          onDragLeave={() => setDragging(false)}
+        >
+          <div className="rounded-xl border-2 border-dashed px-10 py-8 text-sm text-muted-foreground">
+            Drop PDFs to add them to this project
+          </div>
+        </div>
+      )}
       <Sidebar variant="sidebar" collapsible="offcanvas">
         <SidebarHeader className="gap-0 pt-3">
           <SidebarMenu>
@@ -153,6 +227,54 @@ export function ProjectPage({ projectId, notePath, settings, onOpenSettings }: P
           </SidebarMenu>
         </SidebarHeader>
         <SidebarContent>
+          <SidebarGroup>
+            <SidebarGroupLabel>Papers</SidebarGroupLabel>
+            <SidebarGroupAction onClick={() => fileInput.current?.click()} title="Add PDF">
+              <UploadIcon /> <span className="sr-only">Add PDF</span>
+            </SidebarGroupAction>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {papers.map((p) => (
+                  <SidebarMenuItem key={p.id}>
+                    <SidebarMenuButton
+                      isActive={p.id === paperId}
+                      onClick={() => navigate({ name: "project", projectId, paper: p.id })}
+                      title={p.title}
+                    >
+                      <BookOpenIcon />
+                      <span>{p.title}</span>
+                    </SidebarMenuButton>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <SidebarMenuAction showOnHover>
+                          <MoreHorizontalIcon />
+                        </SidebarMenuAction>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent side="right" align="start">
+                        <DropdownMenuItem variant="destructive" onSelect={() => setConfirmDelete({ kind: "paper", id: p.id })}>
+                          <Trash2Icon /> Remove paper
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </SidebarMenuItem>
+                ))}
+                {uploading > 0 && (
+                  <SidebarMenuItem>
+                    <SidebarMenuButton disabled className="text-muted-foreground">
+                      <UploadIcon className="animate-pulse" /> Adding {uploading} PDF{uploading > 1 ? "s" : ""}…
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                )}
+                {papers.length === 0 && uploading === 0 && (
+                  <SidebarMenuItem>
+                    <SidebarMenuButton onClick={() => fileInput.current?.click()} className="text-muted-foreground">
+                      <UploadIcon /> Add a PDF
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                )}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
           <SidebarGroup>
             <SidebarGroupLabel>Notes</SidebarGroupLabel>
             <SidebarGroupAction onClick={newNote} title="New note">
@@ -208,7 +330,18 @@ export function ProjectPage({ projectId, notePath, settings, onOpenSettings }: P
       <SidebarInset className="min-h-0 min-w-0">
         <div className="flex h-full min-h-0">
           <div className="flex min-w-0 flex-1 flex-col">
-            {notePath ? (
+            {paperId ? (
+              paper ? (
+                <PaperView
+                  key={paper.id}
+                  projectId={projectId}
+                  source={paper}
+                  settings={settings}
+                  onOpenSettings={onOpenSettings}
+                  onRenamed={(s) => setPapers((ps) => ps.map((x) => (x.id === s.id ? s : x)))}
+                />
+              ) : null
+            ) : notePath ? (
               <NotePane
                 key={notePath}
                 projectId={projectId}
@@ -233,7 +366,7 @@ export function ProjectPage({ projectId, notePath, settings, onOpenSettings }: P
               </div>
             )}
           </div>
-          {chatOpen && (
+          {chatOpen && !paperId && (
             <aside className="w-[380px] shrink-0 border-l bg-background max-lg:absolute max-lg:inset-y-0 max-lg:right-0 max-lg:z-20 max-lg:shadow-xl">
               <ChatPanel
                 projectId={projectId}
@@ -257,10 +390,15 @@ export function ProjectPage({ projectId, notePath, settings, onOpenSettings }: P
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {confirmDelete?.kind === "project" ? `Delete "${project.name}"?` : "Delete this note?"}
+              {confirmDelete?.kind === "project"
+                ? `Delete "${project.name}"?`
+                : confirmDelete?.kind === "paper"
+                  ? "Remove this paper?"
+                  : "Delete this note?"}
             </AlertDialogTitle>
             <AlertDialogDescription>
-              It will be moved to the .trash folder inside your ResearchPlatform folder, so you can still recover it there.
+              {confirmDelete?.kind === "paper" ? "Your note about it stays. " : ""}It will be moved to the .trash folder
+              inside your ResearchPlatform folder, so you can still recover it there.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -286,36 +424,9 @@ function NotePane({
   onToggleChat: () => void
   onRenamed: (path: string) => void
 }) {
-  const [content, setContent] = useState<string | null>(null)
+  const { content, status, save, sync } = useNote(projectId, path)
   const [source, setSource] = useState(false)
-  const [status, setStatus] = useState<"saved" | "saving" | "error">("saved")
   const [title, setTitle] = useState(path.replace(/\.md$/i, "").split("/").pop() ?? "")
-  const latest = useRef<string>("")
-
-  useEffect(() => {
-    api.note(projectId, path).then(
-      (n) => {
-        latest.current = n.content
-        setContent(n.content)
-      },
-      (e) => toast.error(e.message),
-    )
-  }, [projectId, path])
-
-  const save = useCallback(
-    (md: string) => {
-      latest.current = md
-      setStatus("saving")
-      api.saveNote(projectId, path, md).then(
-        () => setStatus("saved"),
-        (e) => {
-          setStatus("error")
-          toast.error(`Couldn't save: ${e.message}`)
-        },
-      )
-    },
-    [projectId, path],
-  )
 
   const rename = async () => {
     const current = path.replace(/\.md$/i, "").split("/").pop()
@@ -353,7 +464,7 @@ function NotePane({
               size="icon"
               className={cn("size-8 text-muted-foreground", source && "bg-muted text-foreground")}
               onClick={() => {
-                setContent(latest.current)
+                sync()
                 setSource((s) => !s)
               }}
             >

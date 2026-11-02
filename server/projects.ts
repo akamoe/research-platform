@@ -158,11 +158,12 @@ export async function writeNote(id: string, rel: string, content: string) {
   await touchProject(id)
 }
 
-export async function createNote(id: string, name: string, content = "") {
+export async function createNote(id: string, name: string, content = "", folder = "") {
   await getProject(id)
   const base = name.trim().replace(/[\\/:*?"<>|]/g, "-").replace(/\.md$/i, "") || "Untitled"
-  let rel = `${base}.md`
-  for (let i = 2; await exists(notePath(id, rel)); i++) rel = `${base} ${i}.md`
+  const dir = folder ? folder.replace(/^\/+|\/+$/g, "") + "/" : ""
+  let rel = `${dir}${base}.md`
+  for (let i = 2; await exists(notePath(id, rel)); i++) rel = `${dir}${base} ${i}.md`
   await writeNote(id, rel, content || `# ${base}\n\n`)
   return rel
 }
@@ -194,6 +195,8 @@ export interface StoredChat {
   createdAt: string
   updatedAt: string
   model?: { provider: string; model: string }
+  /** Set when this chat is about one uploaded paper. */
+  sourceId?: string
   messages: { role: "user" | "assistant"; content: string }[]
 }
 
@@ -202,7 +205,7 @@ function chatFile(id: string, chatId: string) {
   return path.join(projectDir(id), "chats", `${chatId}.json`)
 }
 
-export async function listChats(id: string) {
+export async function listChats(id: string, sourceId?: string) {
   await getProject(id)
   const dir = path.join(projectDir(id), "chats")
   await fs.mkdir(dir, { recursive: true })
@@ -211,7 +214,7 @@ export async function listChats(id: string) {
     if (!f.endsWith(".json")) continue
     try {
       const { messages: _m, ...meta } = JSON.parse(await fs.readFile(path.join(dir, f), "utf8")) as StoredChat
-      chats.push(meta)
+      if ((meta.sourceId ?? undefined) === sourceId) chats.push(meta)
     } catch {}
   }
   return chats.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))

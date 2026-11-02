@@ -28,12 +28,22 @@ export interface ChatMessage {
   role: "user" | "assistant"
   content: string
 }
+export interface Source {
+  id: string
+  title: string
+  fileName: string
+  addedAt: string
+  pages: number
+  notePath: string
+  hasText: boolean
+}
 export interface ChatMeta {
   id: string
   title: string
   createdAt: string
   updatedAt: string
   model?: { provider: ProviderId; model: string }
+  sourceId?: string
 }
 export interface Chat extends ChatMeta {
   messages: ChatMessage[]
@@ -42,7 +52,8 @@ export interface Chat extends ChatMeta {
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`/api${url}`, {
     ...init,
-    headers: init?.body ? { "content-type": "application/json", ...init.headers } : init?.headers,
+    headers:
+      init?.body && !(init.body instanceof FormData) ? { "content-type": "application/json", ...init.headers } : init?.headers,
   })
   if (!res.ok) {
     let msg = `Request failed (${res.status})`
@@ -83,15 +94,28 @@ export const api = {
     request<{ path: string }>(`/projects/${id}/note${q(path)}`, json("PATCH", { name })),
   deleteNote: (id: string, path: string) => request(`/projects/${id}/note${q(path)}`, { method: "DELETE" }),
 
-  chats: (id: string) => request<ChatMeta[]>(`/projects/${id}/chats`),
+  chats: (id: string, sourceId?: string) =>
+    request<ChatMeta[]>(`/projects/${id}/chats${sourceId ? `?source=${sourceId}` : ""}`),
   chat: (id: string, chatId: string) => request<Chat>(`/projects/${id}/chats/${chatId}`),
+  sources: (id: string) => request<Source[]>(`/projects/${id}/sources`),
+  source: (id: string, sid: string) => request<Source>(`/projects/${id}/sources/${sid}`),
+  uploadPdf: (id: string, file: File) => {
+    const form = new FormData()
+    form.append("file", file)
+    return request<Source>(`/projects/${id}/sources`, { method: "POST", body: form })
+  },
+  renameSource: (id: string, sid: string, title: string) =>
+    request<Source>(`/projects/${id}/sources/${sid}`, json("PATCH", { title })),
+  deleteSource: (id: string, sid: string) => request(`/projects/${id}/sources/${sid}`, { method: "DELETE" }),
+  pdfUrl: (id: string, sid: string) => `/api/projects/${id}/sources/${sid}/pdf`,
+
   deleteChat: (id: string, chatId: string) => request(`/projects/${id}/chats/${chatId}`, { method: "DELETE" }),
 }
 
 /** Send a chat turn and receive the reply as it streams in. */
 export async function streamChat(
   projectId: string,
-  body: { chatId?: string; provider: ProviderId; model: string; messages: ChatMessage[]; openNotePath?: string },
+  body: { chatId?: string; provider: ProviderId; model: string; messages: ChatMessage[]; openNotePath?: string; sourceId?: string },
   onText: (text: string) => void,
   signal?: AbortSignal,
 ): Promise<{ chatId: string }> {

@@ -13,11 +13,13 @@ interface Props {
   projectId: string
   settings: PublicSettings
   openNotePath?: string
-  onClose: () => void
+  /** Scope this chat to one uploaded paper: the model reads the paper, and history only shows its chats. */
+  source?: { id: string; title: string }
+  onClose?: () => void
   onOpenSettings: () => void
 }
 
-export function ChatPanel({ projectId, settings, openNotePath, onClose, onOpenSettings }: Props) {
+export function ChatPanel({ projectId, settings, openNotePath, source, onClose, onOpenSettings }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [chatId, setChatId] = useState<string | undefined>()
   const [input, setInput] = useState("")
@@ -42,6 +44,12 @@ export function ChatPanel({ projectId, settings, openNotePath, onClose, onOpenSe
     bottom.current?.scrollIntoView({ block: "end" })
   }, [messages])
 
+  // A paper's chat picks up where the student left off.
+  useEffect(() => {
+    if (!source) return
+    api.chats(projectId, source.id).then((list) => list[0] && openChat(list[0].id), () => {})
+  }, [projectId, source?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const chooseModel = (m: ModelChoice) => {
     setModel(m)
     localStorage.setItem("rp-model", JSON.stringify(m))
@@ -65,7 +73,14 @@ export function ChatPanel({ projectId, settings, openNotePath, onClose, onOpenSe
     try {
       const res = await streamChat(
         projectId,
-        { chatId, provider: model.provider, model: model.model, messages: next, openNotePath: useNote ? openNotePath : undefined },
+        {
+          chatId,
+          provider: model.provider,
+          model: model.model,
+          messages: next,
+          openNotePath: useNote ? openNotePath : undefined,
+          sourceId: source?.id,
+        },
         (reply) => setMessages([...next, { role: "assistant", content: reply }]),
         abort.current.signal,
       )
@@ -108,7 +123,7 @@ export function ChatPanel({ projectId, settings, openNotePath, onClose, onOpenSe
           </Button>
         )}
         <div className="ml-auto flex items-center">
-          <DropdownMenu onOpenChange={(o) => o && api.chats(projectId).then(setHistory).catch(() => {})}>
+          <DropdownMenu onOpenChange={(o) => o && api.chats(projectId, source?.id).then(setHistory).catch(() => {})}>
             <Tooltip>
               <TooltipTrigger asChild>
                 <DropdownMenuTrigger asChild>
@@ -120,7 +135,9 @@ export function ChatPanel({ projectId, settings, openNotePath, onClose, onOpenSe
               <TooltipContent>Past chats</TooltipContent>
             </Tooltip>
             <DropdownMenuContent align="end" className="w-64">
-              <DropdownMenuLabel className="text-xs text-muted-foreground">Past chats</DropdownMenuLabel>
+              <DropdownMenuLabel className="text-xs text-muted-foreground">
+                {source ? "Past chats about this paper" : "Past chats"}
+              </DropdownMenuLabel>
               {history.length === 0 && <div className="px-2 py-1.5 text-sm text-muted-foreground">None yet</div>}
               {history.slice(0, 20).map((h) => (
                 <DropdownMenuItem key={h.id} onSelect={() => openChat(h.id)} className="group">
@@ -154,20 +171,34 @@ export function ChatPanel({ projectId, settings, openNotePath, onClose, onOpenSe
             </TooltipTrigger>
             <TooltipContent>New chat</TooltipContent>
           </Tooltip>
-          <Button variant="ghost" size="icon" className="size-7" onClick={onClose} aria-label="Close chat">
-            <XIcon className="size-4" />
-          </Button>
+          {onClose && (
+            <Button variant="ghost" size="icon" className="size-7" onClick={onClose} aria-label="Close chat">
+              <XIcon className="size-4" />
+            </Button>
+          )}
         </div>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
         {messages.length === 0 ? (
           <div className="mt-10 space-y-2 px-2 text-sm text-muted-foreground">
-            <p className="font-medium text-foreground">Think out loud here.</p>
-            <p>
-              Ask questions, test an argument, or get feedback on what you've written. The assistant will challenge
-              and explain, but it won't write your paper for you.
-            </p>
+            {source ? (
+              <>
+                <p className="font-medium text-foreground">Ask about this paper.</p>
+                <p>
+                  What's the method? Do the results support the claims? What does a term mean? Answers cite page
+                  numbers, and the chat is saved with the paper.
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="font-medium text-foreground">Think out loud here.</p>
+                <p>
+                  Ask questions, test an argument, or get feedback on what you've written. The assistant will
+                  challenge and explain, but it won't write your paper for you.
+                </p>
+              </>
+            )}
           </div>
         ) : (
           <div className="space-y-5">
@@ -203,7 +234,7 @@ export function ChatPanel({ projectId, settings, openNotePath, onClose, onOpenSe
               }
             }}
             rows={2}
-            placeholder="Ask, question, or think out loud…"
+            placeholder={source ? "Ask about this paper…" : "Ask, question, or think out loud…"}
             className="block max-h-48 w-full resize-none bg-transparent px-3 pt-2.5 text-sm outline-none placeholder:text-muted-foreground"
           />
           <div className="flex items-center gap-1 px-2 pb-2">
@@ -218,7 +249,7 @@ export function ChatPanel({ projectId, settings, openNotePath, onClose, onOpenSe
                     }
                   >
                     <FileTextIcon className="size-3 shrink-0" />
-                    <span className="truncate">{openNotePath.replace(/\.md$/, "")}</span>
+                    <span className="truncate">{openNotePath.replace(/\.md$/, "").split("/").pop()}</span>
                   </button>
                 </TooltipTrigger>
                 <TooltipContent>{useNote ? "The assistant can read this note. Click to hide it." : "Click to let the assistant read this note"}</TooltipContent>

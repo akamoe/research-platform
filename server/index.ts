@@ -12,6 +12,7 @@ import * as projects from "./projects.ts"
 import { isProvider, publicSettings, readSettings, writeSettings, type ProviderId } from "./settings.ts"
 import { listModels, streamChat } from "./llm.ts"
 import { mentorPrompt } from "./mentor.ts"
+import * as sources from "./sources.ts"
 
 const PORT = Number(process.env.RP_PORT ?? 5174)
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
@@ -115,8 +116,42 @@ api.delete("/projects/:id/note", async (c) => {
   return c.json({ ok: true })
 })
 
+// ---------- papers (PDF sources) ----------
+api.get("/projects/:id/sources", async (c) => c.json(await sources.listSources(c.req.param("id"))))
+api.post("/projects/:id/sources", async (c) => {
+  const len = Number(c.req.header("content-length") ?? 0)
+  if (len > sources.MAX_PDF_BYTES + 1024 * 1024) throw new HttpError(413, "PDF is larger than 200 MB")
+  const form = await c.req.parseBody()
+  const file = form.file
+  if (!(file instanceof File)) throw new HttpError(400, "No file uploaded")
+  const bytes = new Uint8Array(await file.arrayBuffer())
+  return c.json(await sources.addPdf(c.req.param("id"), file.name, bytes), 201)
+})
+api.get("/projects/:id/sources/:sid", async (c) =>
+  c.json(await sources.getSource(c.req.param("id"), c.req.param("sid"))),
+)
+api.get("/projects/:id/sources/:sid/pdf", async (c) => {
+  const src = await sources.getSource(c.req.param("id"), c.req.param("sid"))
+  const data = await fs.promises.readFile(sources.pdfPath(c.req.param("id"), src.id))
+  return c.body(data, 200, {
+    "Content-Type": "application/pdf",
+    "Content-Disposition": `inline; filename*=UTF-8''${encodeURIComponent(src.fileName)}`,
+    "Cache-Control": "private, max-age=3600",
+  })
+})
+api.patch("/projects/:id/sources/:sid", async (c) => {
+  const body = z.object({ title: z.string() }).parse(await c.req.json())
+  return c.json(await sources.renameSource(c.req.param("id"), c.req.param("sid"), body.title))
+})
+api.delete("/projects/:id/sources/:sid", async (c) => {
+  await sources.deleteSource(c.req.param("id"), c.req.param("sid"))
+  return c.json({ ok: true })
+})
+
 // ---------- chat ----------
-api.get("/projects/:id/chats", async (c) => c.json(await projects.listChats(c.req.param("id"))))
+api.get("/projects/:id/chats", async (c) =>
+  c.json(await projects.listChats(c.req.param("id"), c.req.query("source") || undefined)),
+)
 api.get("/projects/:id/chats/:chatId", async (c) =>
   c.json(await projects.readChat(c.req.param("id"), c.req.param("chatId"))),
 )
@@ -131,6 +166,7 @@ const ChatBody = z.object({
   model: z.string().min(1),
   messages: z.array(z.object({ role: z.enum(["user", "assistant"]), content: z.string() })).min(1),
   openNotePath: z.string().optional(),
+  sourceId: z.string().regex(/^[\w-]+$/).optional(),
 })
 
 /**
@@ -150,13 +186,18 @@ api.post("/projects/:id/chat", async (c) => {
       openNote = { path: body.openNotePath, content: await projects.readNote(id, body.openNotePath) }
     } catch {}
   }
+  let paper: { title: string; text: string } | undefined
+  if (body.sourceId) {
+    const src = await sources.getSource(id, body.sourceId)
+    paper = { title: src.title, text: await sources.sourceText(id, src.id) }
+  }
   const settings = await readSettings()
   const controller = new AbortController()
   const gen = streamChat({
     settings,
     provider,
     model: body.model,
-    system: mentorPrompt({ project, noteTitles: notes.map((n) => n.path), openNote }),
+    system: mentorPrompt({ project, noteTitles: notes.map((n) => n.path), openNote, paper }),
     messages: body.messages,
     signal: controller.signal,
   })
@@ -196,6 +237,7 @@ api.post("/projects/:id/chat", async (c) => {
           createdAt: existing?.createdAt ?? now,
           updatedAt: now,
           model: { provider, model: body.model },
+          sourceId: body.sourceId ?? existing?.sourceId,
           messages: [...body.messages, { role: "assistant", content: reply }],
         })
       }

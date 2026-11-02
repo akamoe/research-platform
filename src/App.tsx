@@ -26,6 +26,7 @@ export default function App() {
             key={route.projectId}
             projectId={route.projectId}
             notePath={route.note}
+            paperId={route.paper}
             settings={settings}
             onOpenSettings={() => setSettingsOpen(true)}
           />

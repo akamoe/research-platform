@@ -1,22 +1,32 @@
 import { useEffect, useState } from "react"
 
-/** Tiny hash router: #/ , #/p/<projectId>?note=<path> */
+/** Tiny hash router: #/ , #/p/<projectId>?note=<path> , #/p/<projectId>?paper=<id> */
 export type Route =
   | { name: "home" }
-  | { name: "project"; projectId: string; note?: string }
+  | { name: "project"; projectId: string; note?: string; paper?: string }
 
 function parse(): Route {
   const hash = window.location.hash.replace(/^#/, "") || "/"
   const [pathname, query = ""] = hash.split("?")
   const params = new URLSearchParams(query)
   const m = pathname.match(/^\/p\/([\w-]+)/)
-  if (m) return { name: "project", projectId: m[1], note: params.get("note") ?? undefined }
+  if (m)
+    return {
+      name: "project",
+      projectId: m[1],
+      note: params.get("note") ?? undefined,
+      paper: params.get("paper") ?? undefined,
+    }
   return { name: "home" }
 }
 
 export function href(route: Route) {
   if (route.name === "home") return "#/"
-  const q = route.note ? `?note=${encodeURIComponent(route.note)}` : ""
+  const q = route.paper
+    ? `?paper=${encodeURIComponent(route.paper)}`
+    : route.note
+      ? `?note=${encodeURIComponent(route.note)}`
+      : ""
   return `#/p/${route.projectId}${q}`
 }
 

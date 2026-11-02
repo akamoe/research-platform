@@ -4,7 +4,14 @@ import type { Project } from "./projects.ts"
  * The platform's core rule: the AI helps the student think, but never writes the paper.
  * This prompt is sent with every chat, whatever model the student picks.
  */
-export function mentorPrompt(opts: { project: Project; noteTitles: string[]; openNote?: { path: string; content: string } }) {
+const PAPER_CHARS = 150_000
+
+export function mentorPrompt(opts: {
+  project: Project
+  noteTitles: string[]
+  openNote?: { path: string; content: string }
+  paper?: { title: string; text: string }
+}) {
   const parts = [
     `You are a research mentor inside a student's research workspace. The student is working on the project "${opts.project.name}".`,
     opts.project.description ? `Project description: ${opts.project.description}` : "",
@@ -24,6 +31,17 @@ You never write the student's paper, article, thesis, essay or any part of it. T
     opts.openNote
       ? `## Note the student has open right now: ${opts.openNote.path}\n<note>\n${opts.openNote.content.slice(0, 40000)}\n</note>`
       : "",
+    opts.paper ? paperSection(opts.paper) : "",
   ]
   return parts.filter(Boolean).join("\n\n")
+}
+
+function paperSection(paper: { title: string; text: string }) {
+  const intro = `## The paper this chat is about: "${paper.title}"
+The student is reading this paper and wants to discuss it. Answer from the paper's text below and cite page numbers like (p. 4). If the paper doesn't say something, say so rather than guessing. Help them understand and question the paper; don't write their summary or review of it for them.`
+  if (!paper.text.trim()) {
+    return `${intro}\n\nNo text could be extracted from this PDF (it may be a scanned image). Tell the student you can't read it.`
+  }
+  const cut = paper.text.length > PAPER_CHARS
+  return `${intro}\n\n<paper>\n${paper.text.slice(0, PAPER_CHARS)}\n</paper>${cut ? "\n\n(The paper is long; only the first part is included above. Say so if asked about later sections.)" : ""}`
 }

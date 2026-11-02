@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import {
   ArrowLeftIcon,
   BookOpenIcon,
+  LibraryBigIcon,
+  WaypointsIcon,
   UploadIcon,
   CodeIcon,
   FileTextIcon,
@@ -47,6 +49,8 @@ import { ChatPanel } from "@/components/chat/chat-panel"
 import { NoteEditor, SourceEditor } from "@/components/editor/note-editor"
 import { ProjectDialog } from "@/components/project-dialog"
 import { PaperView } from "@/components/papers/paper-view"
+import { CanvasView } from "@/components/canvas/canvas-view"
+import { KnowledgeView } from "@/components/knowledge/knowledge-view"
 import { api, type NoteFile, type Project, type PublicSettings, type Source } from "@/lib/api"
 import { navigate } from "@/lib/router"
 import { useNote } from "@/hooks/use-note"
@@ -56,11 +60,13 @@ interface Props {
   projectId: string
   notePath?: string
   paperId?: string
+  view?: "canvas" | "knowledge"
+  kbPage?: string
   settings: PublicSettings
   onOpenSettings: () => void
 }
 
-export function ProjectPage({ projectId, notePath, paperId, settings, onOpenSettings }: Props) {
+export function ProjectPage({ projectId, notePath, paperId, view, kbPage, settings, onOpenSettings }: Props) {
   const [project, setProject] = useState<Project | null>(null)
   const [allNotes, setNotes] = useState<NoteFile[]>([])
   // Paper notes are opened next to their PDF, so they aren't listed twice.
@@ -87,8 +93,8 @@ export function ProjectPage({ projectId, notePath, paperId, settings, onOpenSett
   // Open the first note when nothing is selected.
   const firstNote = notes[0]?.path
   useEffect(() => {
-    if (!notePath && !paperId && firstNote) navigate({ name: "project", projectId, note: firstNote }, true)
-  }, [notePath, paperId, firstNote, projectId])
+    if (!notePath && !paperId && !view && firstNote) navigate({ name: "project", projectId, note: firstNote }, true)
+  }, [notePath, paperId, view, firstNote, projectId])
 
   const upload = async (files: File[]) => {
     const pdfs = files.filter((f) => f.type === "application/pdf" || f.name.toLowerCase().endsWith(".pdf"))
@@ -228,6 +234,28 @@ export function ProjectPage({ projectId, notePath, paperId, settings, onOpenSett
         </SidebarHeader>
         <SidebarContent>
           <SidebarGroup>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    isActive={view === "canvas"}
+                    onClick={() => navigate({ name: "project", projectId, view: "canvas" })}
+                  >
+                    <WaypointsIcon /> Canvas
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    isActive={view === "knowledge"}
+                    onClick={() => navigate({ name: "project", projectId, view: "knowledge" })}
+                  >
+                    <LibraryBigIcon /> Knowledge base
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+          <SidebarGroup>
             <SidebarGroupLabel>Papers</SidebarGroupLabel>
             <SidebarGroupAction onClick={() => fileInput.current?.click()} title="Add PDF">
               <UploadIcon /> <span className="sr-only">Add PDF</span>
@@ -330,7 +358,16 @@ export function ProjectPage({ projectId, notePath, paperId, settings, onOpenSett
       <SidebarInset className="min-h-0 min-w-0">
         <div className="flex h-full min-h-0">
           <div className="flex min-w-0 flex-1 flex-col">
-            {paperId ? (
+            {view === "canvas" ? (
+              <CanvasView projectId={projectId} chatOpen={chatOpen} onToggleChat={() => setChatOpen((o) => !o)} />
+            ) : view === "knowledge" ? (
+              <KnowledgeView
+                projectId={projectId}
+                page={kbPage}
+                chatOpen={chatOpen}
+                onToggleChat={() => setChatOpen((o) => !o)}
+              />
+            ) : paperId ? (
               paper ? (
                 <PaperView
                   key={paper.id}
@@ -366,12 +403,12 @@ export function ProjectPage({ projectId, notePath, paperId, settings, onOpenSett
               </div>
             )}
           </div>
-          {chatOpen && !paperId && (
+          {chatOpen && (view || !paperId) && (
             <aside className="w-[380px] shrink-0 border-l bg-background max-lg:absolute max-lg:inset-y-0 max-lg:right-0 max-lg:z-20 max-lg:shadow-xl">
               <ChatPanel
                 projectId={projectId}
                 settings={settings}
-                openNotePath={notePath}
+                openNotePath={view ? undefined : notePath}
                 onClose={() => setChatOpen(false)}
                 onOpenSettings={onOpenSettings}
               />

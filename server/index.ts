@@ -13,6 +13,9 @@ import { isProvider, publicSettings, readSettings, writeSettings, type ProviderI
 import { listModels, streamChat } from "./llm.ts"
 import { mentorPrompt } from "./mentor.ts"
 import * as sources from "./sources.ts"
+import * as knowledge from "./knowledge.ts"
+import * as canvas from "./canvas.ts"
+import { backgroundModel } from "./ai.ts"
 
 const PORT = Number(process.env.RP_PORT ?? 5174)
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
@@ -125,7 +128,13 @@ api.post("/projects/:id/sources", async (c) => {
   const file = form.file
   if (!(file instanceof File)) throw new HttpError(400, "No file uploaded")
   const bytes = new Uint8Array(await file.arrayBuffer())
-  return c.json(await sources.addPdf(c.req.param("id"), file.name, bytes), 201)
+  const src = await sources.addPdf(c.req.param("id"), file.name, bytes)
+  // File it into the knowledge base in the background, if a model is set up.
+  const settings = await readSettings()
+  if (src.hasText && settings.defaultModel && settings.providers[settings.defaultModel.provider]?.apiKey) {
+    knowledge.ingestPaperInBackground(c.req.param("id"), src.id, src.title)
+  }
+  return c.json(src, 201)
 })
 api.get("/projects/:id/sources/:sid", async (c) =>
   c.json(await sources.getSource(c.req.param("id"), c.req.param("sid"))),
@@ -182,6 +191,65 @@ api.delete("/projects/:id/sources/:sid", async (c) => {
   return c.json({ ok: true })
 })
 
+// ---------- knowledge base (OKF bundle) ----------
+const pageParam = (c: { req: { query: (k: string) => string | undefined } }) => {
+  const p = c.req.query("page")
+  if (!p) throw new HttpError(400, "page is required")
+  return p
+}
+api.get("/projects/:id/knowledge", async (c) => {
+  const id = c.req.param("id")
+  const [pages, st, lint] = await Promise.all([knowledge.listPages(id), knowledge.status(id), knowledge.lastLint(id)])
+  return c.json({ pages, status: st, lint })
+})
+api.get("/projects/:id/knowledge/page", async (c) => c.json(await knowledge.readPage(c.req.param("id"), pageParam(c))))
+api.put("/projects/:id/knowledge/page", async (c) => {
+  const body = z.object({ raw: z.string() }).parse(await c.req.json())
+  return c.json(await knowledge.savePageRaw(c.req.param("id"), pageParam(c), body.raw))
+})
+api.post("/projects/:id/knowledge/page/review", async (c) =>
+  c.json(await knowledge.markReviewed(c.req.param("id"), pageParam(c))),
+)
+api.get("/projects/:id/knowledge/log", async (c) => c.json({ content: await knowledge.readLog(c.req.param("id")) }))
+api.post("/projects/:id/knowledge/ingest", async (c) => {
+  const id = c.req.param("id")
+  const body = z.object({ sourceIds: z.array(z.string().regex(/^[\w-]+$/)).optional() }).parse(await c.req.json())
+  await backgroundModel()
+  const st = await knowledge.status(id)
+  const todo = body.sourceIds ? st.notIngested.filter((s) => body.sourceIds!.includes(s.id)) : st.notIngested
+  for (const s of todo) knowledge.ingestPaperInBackground(id, s.id, s.title)
+  return c.json(await knowledge.status(id))
+})
+api.post("/projects/:id/knowledge/lint", async (c) => c.json(await knowledge.lint(c.req.param("id"))))
+
+// ---------- notes canvas ----------
+api.get("/projects/:id/canvas", async (c) => {
+  const id = c.req.param("id")
+  const { removed: _r, ...rest } = await canvas.readCanvas(id)
+  return c.json({ ...rest, thinking: canvas.isThinking(id) })
+})
+api.post("/projects/:id/canvas/cards", async (c) => {
+  const body = z.object({ text: z.string().max(4000), x: z.number(), y: z.number() }).parse(await c.req.json())
+  return c.json(await canvas.addCard(c.req.param("id"), body), 201)
+})
+api.patch("/projects/:id/canvas/cards/:cardId", async (c) => {
+  const body = z
+    .object({ text: z.string().max(4000).optional(), x: z.number().optional(), y: z.number().optional(), kind: z.enum(canvas.KINDS).optional() })
+    .parse(await c.req.json())
+  return c.json(await canvas.updateCard(c.req.param("id"), c.req.param("cardId"), body))
+})
+api.delete("/projects/:id/canvas/cards/:cardId", async (c) => {
+  await canvas.removeCard(c.req.param("id"), c.req.param("cardId"))
+  return c.json({ ok: true })
+})
+api.post("/projects/:id/canvas/cards/:cardId/restore", async (c) =>
+  c.json(await canvas.restoreCard(c.req.param("id"), c.req.param("cardId"))),
+)
+api.post("/projects/:id/canvas/think", async (c) => {
+  const { removed: _r, ...rest } = await canvas.think(c.req.param("id"))
+  return c.json(rest)
+})
+
 // ---------- chat ----------
 api.get("/projects/:id/chats", async (c) =>
   c.json(await projects.listChats(c.req.param("id"), c.req.query("source") || undefined)),
@@ -225,13 +293,15 @@ api.post("/projects/:id/chat", async (c) => {
     const src = await sources.getSource(id, body.sourceId)
     paper = { title: src.title, text: await sources.sourceText(id, src.id) }
   }
+  const lastQuestion = [...body.messages].reverse().find((m) => m.role === "user")?.content ?? ""
+  const memory = await knowledge.contextFor(id, `${lastQuestion} ${paper?.title ?? ""}`)
   const settings = await readSettings()
   const controller = new AbortController()
   const gen = streamChat({
     settings,
     provider,
     model: body.model,
-    system: mentorPrompt({ project, noteTitles: notes.map((n) => n.path), openNote, paper }),
+    system: mentorPrompt({ project, noteTitles: notes.map((n) => n.path), openNote, paper, knowledge: memory }),
     messages: body.messages,
     signal: controller.signal,
   })

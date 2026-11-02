@@ -59,6 +59,66 @@ export interface ChatMeta {
   model?: { provider: ProviderId; model: string }
   sourceId?: string
 }
+export interface KbPageMeta {
+  id: string
+  type: string
+  title: string
+  description: string
+  tags: string[]
+  sources: { id?: string; resource: string; title?: string }[]
+  generated?: { by: string; at?: string }
+  verified?: { by: string; at: string }[]
+  status?: string
+  contested?: boolean
+}
+export interface KbPage extends KbPageMeta {
+  body: string
+  raw: string
+}
+export interface KbFinding {
+  kind: "contradiction" | "gap" | "duplicate" | "unsupported" | "broken-link" | "orphan" | "question"
+  pages: string[]
+  message: string
+}
+export interface KbStatus {
+  pages: number
+  notIngested: { id: string; title: string; running: boolean; error: string | null }[]
+  running: { id: string; title: string }[]
+}
+export interface KbOverview {
+  pages: KbPageMeta[]
+  status: KbStatus
+  lint: { at: string; findings: KbFinding[] } | null
+}
+export type CardKind = "note" | "question" | "claim" | "evidence" | "idea" | "quote" | "definition" | "task" | "source"
+export interface CanvasCard {
+  id: string
+  text: string
+  kind: CardKind
+  kindBy?: "student" | "ai"
+  x: number
+  y: number
+  createdAt: string
+  updatedAt: string
+  note?: string
+  tags?: string[]
+  pages?: string[]
+  analyzedAt?: string
+}
+export interface CanvasLink {
+  id: string
+  from: string
+  to: string
+  relation: "supports" | "contradicts" | "related" | "answers" | "example-of"
+  why: string
+}
+export interface CanvasData {
+  cards: CanvasCard[]
+  links: CanvasLink[]
+  synthesis?: { at: string; themes: { title: string; insight: string; cards: string[] }[]; questions: string[] }
+  thinking?: boolean
+}
+
 export interface Chat extends ChatMeta {
   messages: ChatMessage[]
 }
@@ -138,6 +198,27 @@ export const api = {
   assetUrl: (id: string, sid: string, file: string) => `/api/projects/${id}/sources/${sid}/assets/${file}`,
 
   deleteChat: (id: string, chatId: string) => request(`/projects/${id}/chats/${chatId}`, { method: "DELETE" }),
+
+  knowledge: (id: string) => request<KbOverview>(`/projects/${id}/knowledge`),
+  kbPage: (id: string, page: string) => request<KbPage>(`/projects/${id}/knowledge/page?page=${encodeURIComponent(page)}`),
+  saveKbPage: (id: string, page: string, raw: string) =>
+    request<KbPage>(`/projects/${id}/knowledge/page?page=${encodeURIComponent(page)}`, json("PUT", { raw })),
+  reviewKbPage: (id: string, page: string) =>
+    request<KbPage>(`/projects/${id}/knowledge/page/review?page=${encodeURIComponent(page)}`, { method: "POST" }),
+  kbLog: (id: string) => request<{ content: string }>(`/projects/${id}/knowledge/log`),
+  ingest: (id: string, sourceIds?: string[]) =>
+    request<KbStatus>(`/projects/${id}/knowledge/ingest`, json("POST", { sourceIds })),
+  lintKnowledge: (id: string) => request<{ at: string; findings: KbFinding[] }>(`/projects/${id}/knowledge/lint`, { method: "POST" }),
+
+  canvas: (id: string) => request<CanvasData>(`/projects/${id}/canvas`),
+  addCard: (id: string, card: { text: string; x: number; y: number }) =>
+    request<CanvasCard>(`/projects/${id}/canvas/cards`, json("POST", card)),
+  updateCard: (id: string, cardId: string, patch: { text?: string; x?: number; y?: number; kind?: CardKind }) =>
+    request<CanvasCard>(`/projects/${id}/canvas/cards/${cardId}`, json("PATCH", patch)),
+  removeCard: (id: string, cardId: string) => request(`/projects/${id}/canvas/cards/${cardId}`, { method: "DELETE" }),
+  restoreCard: (id: string, cardId: string) =>
+    request<CanvasCard>(`/projects/${id}/canvas/cards/${cardId}/restore`, { method: "POST" }),
+  think: (id: string) => request<CanvasData>(`/projects/${id}/canvas/think`, { method: "POST" }),
 }
 
 /** Send a chat turn and receive the reply as it streams in. */

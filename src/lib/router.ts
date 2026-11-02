@@ -1,9 +1,12 @@
 import { useEffect, useState } from "react"
 
-/** Tiny hash router: #/ , #/p/<projectId>?note=<path> , #/p/<projectId>?paper=<id> */
+/**
+ * Tiny hash router: #/ , #/p/<projectId>?note=<path> , ?paper=<id> , ?view=canvas ,
+ * ?view=knowledge&page=<page id>
+ */
 export type Route =
   | { name: "home" }
-  | { name: "project"; projectId: string; note?: string; paper?: string }
+  | { name: "project"; projectId: string; note?: string; paper?: string; view?: "canvas" | "knowledge"; page?: string }
 
 function parse(): Route {
   const hash = window.location.hash.replace(/^#/, "") || "/"
@@ -16,17 +19,21 @@ function parse(): Route {
       projectId: m[1],
       note: params.get("note") ?? undefined,
       paper: params.get("paper") ?? undefined,
+      view: (["canvas", "knowledge"] as const).find((v) => v === params.get("view")),
+      page: params.get("page") ?? undefined,
     }
   return { name: "home" }
 }
 
 export function href(route: Route) {
   if (route.name === "home") return "#/"
-  const q = route.paper
-    ? `?paper=${encodeURIComponent(route.paper)}`
-    : route.note
-      ? `?note=${encodeURIComponent(route.note)}`
-      : ""
+  const q = route.view
+    ? `?view=${route.view}${route.page ? `&page=${encodeURIComponent(route.page)}` : ""}`
+    : route.paper
+      ? `?paper=${encodeURIComponent(route.paper)}`
+      : route.note
+        ? `?note=${encodeURIComponent(route.note)}`
+        : ""
   return `#/p/${route.projectId}${q}`
 }
 

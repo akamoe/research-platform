@@ -7,4 +7,5 @@ Local-first web app for students writing research papers. Hard product rule: the
 - UI rules from the owner: shadcn components (or shadcn-compatible libraries) only, minimal, no clutter.
 - Checks: `npm run typecheck` and `npx vite build`.
 - PDF viewer is EmbedPDF (headless, PDFium wasm served locally) in `src/components/papers/pdf-annotator.tsx`. Highlights are stored as overlays in `sources/<id>.highlights.json`, not written into the PDF. Note links to highlights use `#hl/<sourceId>/<highlightId>`.
+- Knowledge base: `server/knowledge.ts` writes an OKF v0.2 bundle in `<project>/knowledge/` (index.md and log.md are regenerated/appended by code; pages merge per-paper subsections deterministically, the model only returns JSON). Canvas: `server/canvas.ts` + `src/components/canvas/` (React Flow). Background AI calls go through `server/ai.ts` and use `settings.defaultModel`.
 - Deletes go to `<data>/.trash`, never hard-delete user files.

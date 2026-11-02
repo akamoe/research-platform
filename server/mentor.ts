@@ -11,6 +11,7 @@ export function mentorPrompt(opts: {
   noteTitles: string[]
   openNote?: { path: string; content: string }
   paper?: { title: string; text: string }
+  knowledge?: { index: string; pages: string } | null
 }) {
   const parts = [
     `You are a research mentor inside a student's research workspace. The student is working on the project "${opts.project.name}".`,
@@ -31,9 +32,19 @@ You never write the student's paper, article, thesis, essay or any part of it. T
     opts.openNote
       ? `## Note the student has open right now: ${opts.openNote.path}\n<note>\n${opts.openNote.content.slice(0, 40000)}\n</note>`
       : "",
+    opts.knowledge ? knowledgeSection(opts.knowledge) : "",
     opts.paper ? paperSection(opts.paper) : "",
   ]
   return parts.filter(Boolean).join("\n\n")
+}
+
+function knowledgeSection(kb: { index: string; pages: string }) {
+  return `## Project memory: the knowledge base
+This project keeps a knowledge base built from the papers the student has added. Use it as your memory of what they have read. When you rely on it, name the page or paper (for example "according to the Sleep spindles page"). It was written by an AI from the papers, so treat it as notes, not ground truth, and say so if something looks doubtful.
+
+Pages:
+${kb.index}
+${kb.pages ? `\nThe pages most relevant to the latest message:\n${kb.pages}` : ""}`
 }
 
 function paperSection(paper: { title: string; text: string }) {

@@ -36,7 +36,9 @@ ResearchPlatform/
   projects/<project>/
     project.json
     notes/*.md           your notes, as plain markdown
-    knowledge/           the project's knowledge base (coming in step 2)
+    knowledge/           the knowledge base: an Open Knowledge Format bundle
+                         (index.md, log.md, papers/*.md, concepts/*.md)
+    canvas.json          the notes canvas: cards, links and themes
     sources/             your PDFs, their extracted text, a small record for each,
                          and your highlights (<id>.highlights.json, <id>-assets/*.png)
     chats/*.json         chat history
@@ -48,6 +50,8 @@ ResearchPlatform/
 - **Projects**: one per paper or research question.
 - **Papers**: add PDFs with the upload button in the sidebar, or drag them onto the window. Each paper opens with the PDF on the left and its own note on the right (drag the divider to resize). Switch to **Chat** to ask about that paper: the model reads its text, cites page numbers, and the conversation is saved with the paper. Scanned PDFs without a text layer can be read but not chatted with yet.
 - **Highlights**: select text in a PDF and pick a color. The highlight stays on the PDF and the quote is copied with a small `p. N` link; paste it into the note, and click the link to jump back to that spot. **Capture area** grabs a figure or table as an image the same way. The **Copy / Add to note** switch above the PDF decides whether new highlights are copied (the default) or go straight into the note. Click a highlight to recolor it, copy it, add it to the note, or remove it. Drag the handles on an image in a note to resize it; the size is kept in the markdown as `![caption|320](...)`. Highlights live in their own file; your PDF is never changed.
+- **Canvas**: write one thought per card in the box at the bottom (end with `#question`, `#claim`, `#evidence`, `#idea`, `#quote`, `#definition`, `#task` or `#source` to set its kind). A few seconds after you stop, the AI reads new cards: it sets a kind, adds a short note (a caveat, a definition or a question), tags it, links related cards (green supports, red dashed contradicts; hover a line for why) and lists emerging themes on the right. Double-click a card to edit it; select it and press Delete to remove it (Undo brings it back). It uses the model you last picked in chat and never writes text for your paper.
+- **Knowledge base**: the AI's memory of the project, following Google's Open Knowledge Format and Karpathy's LLM-wiki loop. Each PDF you add is read once (automatically if a model is set up) and filed into a page for the paper plus shared concept pages, with page citations and a **Tensions** section when papers disagree. **Check** looks for contradictions, gaps and broken links. Pages are AI notes until you **Mark reviewed** (the OKF `verified` field); you can edit any page. The chat reads the index and the most relevant pages, so it builds on what you've read.
 - **Notes**: a markdown editor with no toolbars. Type `# ` for a heading, `- ` for a list, `> ` for a quote, `**bold**`, `==highlight==`. The `</>` button switches to the raw markdown.
 - **Chat** (`Ctrl/⌘ J`): pick any model from your connected providers. The assistant can see the note you have open (click the note chip to hide it). It follows one firm rule in every model: it won't write your paper.
 
@@ -63,6 +67,6 @@ Stack: Vite, React, TypeScript, Tailwind and [shadcn/ui](https://ui.shadcn.com) 
 ## Roadmap
 
 1. **Foundation**: projects, markdown notes, API keys, model picker, mentor chat. *(done)*
-2. **Knowledge base and notes canvas**: a per-project wiki in the Open Knowledge Format, maintained on Karpathy's ingest / query / lint loop and used as the chat's memory; a canvas where you write freely and the AI quietly tags, links, and flags contradictions.
+2. **Knowledge base and notes canvas**: a per-project wiki in the Open Knowledge Format, maintained on Karpathy's ingest / query / lint loop and used as the chat's memory; a canvas where you write freely and the AI quietly tags, links, and flags contradictions. *(done)*
 3. **Library and citations**: PDF upload, side-by-side reading notes, colored highlights and figure captures, and per-paper chat are done. Still to come: add papers by DOI or BibTeX, search and chat across them (open-notebook's engine behind this UI), export citations in any CSL style or as BibTeX/RIS.
 4. **LaTeX editor**: write LaTeX with a live PDF preview compiled locally, wired to your library.

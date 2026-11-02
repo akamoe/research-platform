@@ -451,7 +451,7 @@ if (fs.existsSync(DIST)) {
 
 serve({ fetch: app.fetch, port: PORT, hostname: "127.0.0.1" }, async (info) => {
   const url = `http://localhost:${info.port}`
-  console.log(`\n  Research Platform running at ${url}`)
+  console.log(`\n  Folio running at ${url}`)
   console.log(`  Your files are in ${DATA_DIR}\n`)
   if (process.argv.includes("--open")) {
     const { default: open } = await import("open")

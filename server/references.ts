@@ -193,7 +193,7 @@ const DOI_RE = /\b(10\.\d{4,9}\/[^\s"<>]+)/gi
 
 async function fetchJson(url: string, accept = "application/json"): Promise<any> { // eslint-disable-line @typescript-eslint/no-explicit-any
   const res = await fetch(url, {
-    headers: { Accept: accept, "User-Agent": "ResearchPlatform/0.1 (local app; mailto:research-platform@users.noreply.github.com)" },
+    headers: { Accept: accept, "User-Agent": "Folio/0.1 (local research app; https://github.com/akamoe/research-platform)" },
     signal: AbortSignal.timeout(15000),
   })
   if (res.status === 404) return null

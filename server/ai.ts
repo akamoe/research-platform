@@ -21,7 +21,7 @@ export async function complete(system: string, user: string, signal?: AbortSigna
   for await (const chunk of streamChat({ settings, provider, model, system, messages: [{ role: "user", content: user }], signal })) {
     out += chunk
   }
-  return { text: out, actor: `research-platform/${model}` }
+  return { text: out, actor: `folio/${model}` }
 }
 
 /** Pull the JSON object out of a model reply that may be wrapped in prose or code fences. */

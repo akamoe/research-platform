@@ -1,4 +1,6 @@
-# Research Platform
+# Folio
+
+*Every source, every note, one folio.*
 
 A local research workspace for students. Collect ideas, take reading notes, and think through your project with the AI model of your choice. **The AI never writes your paper.** It asks questions, explains, and gives feedback, but the writing is yours.
 
@@ -58,6 +60,7 @@ ResearchPlatform/
 - **Notes**: a markdown editor with a slim toolbar on top (turn into heading, quote or code block; bold, italic, strikethrough, code, highlight, link; bulleted, numbered and check lists; undo/redo). Markdown shortcuts work too: `# ` for a heading, `- ` for a list, `> ` for a quote, `**bold**`, `==highlight==`. The `</>` button switches to the raw markdown. A note's file is named after its first `# heading` and follows it as you change it; renaming the note yourself (click its name at the top) stops that.
 - **References and citations**: open **References** in the sidebar and press **Add**. Paste a DOI or doi.org link, BibTeX or RIS (several at once is fine), or type a title to search Crossref and pick the match; you can also import a .bib or .ris file. PDFs you upload that print their DOI are added automatically and linked to the paper. Each reference gets a key like `@walker2002practice`; edit any field, or delete it (Undo brings it back). In a note, **Cite** on the toolbar inserts `[@walker2002practice]` (cite again right after to get `[@a; @b]`), pandoc's citation syntax, so pandoc or Quarto can turn the note into a Word or LaTeX document with real citations. Tick the boxes next to references to pick some: a bar appears where you choose a style and copy them as a reference list or an in-text citation, export them, or delete them. **Export** builds a bibliography for the whole library or just what one note cites, in any of the 10,000+ CSL styles (APA, MLA, Chicago, IEEE, Harvard, Vancouver, or search a journal's name), copied with formatting for Word or Google Docs, or as BibTeX, RIS or CSL JSON. DOI lookup, title search and less common styles need the internet; styles are cached once fetched.
 - **Search** (`Ctrl/⌘ K`): finds words in the full text of every paper and note, with the matching passage, and opens the paper at that page. It runs on your computer, so it works offline and without an API key.
+- **Themes**: **Settings → Theme** picks the color theme. Folio (warm paper, oxblood ink) is the default; Neutral and 42 presets from [tweakcn](https://tweakcn.com) are built in. To use your own, design it on tweakcn, open **Code**, copy the CSS and press **Paste theme**. Light, dark and system mode work with every theme. Themes that use web fonts load them from Google Fonts when online.
 - **Chat** (`Ctrl/⌘ J`): pick any model from your connected providers. The assistant can see the note you have open (click the note chip to hide it). It also searches your papers for passages that match your question, answers from them, and cites them as small chips: click one to read the passage and open the PDF on that page. The papers chip under the box picks which papers it searches. It follows one firm rule in every model: it won't write your paper.
 
 ## Development
@@ -75,3 +78,7 @@ Stack: Vite, React, TypeScript, Tailwind and [shadcn/ui](https://ui.shadcn.com) 
 2. **Knowledge base and notes canvas**: a per-project wiki in the Open Knowledge Format, maintained on Karpathy's ingest / query / lint loop and used as the chat's memory; a canvas where you write freely and the AI quietly tags, links, and flags contradictions. *(done)*
 3. **Library and citations**: PDF upload, side-by-side reading notes, colored highlights and figure captures, per-paper chat, a reference library (DOI, BibTeX, RIS, title search), `[@key]` citations in notes, and bibliography export in any CSL style or as BibTeX/RIS are done. Still to come: search and chat across all papers (open-notebook's engine behind this UI).
 4. **LaTeX editor**: write LaTeX with a live PDF preview compiled locally, wired to your library.
+
+## Credits
+
+Theme presets in `src/lib/tweakcn-presets.json` come from [tweakcn](https://github.com/jnsahaj/tweakcn) (Apache-2.0).

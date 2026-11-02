@@ -25,7 +25,7 @@ export function HomePage({ onOpenSettings }: { onOpenSettings: () => void }) {
   return (
     <div className="mx-auto flex min-h-full max-w-2xl flex-col px-6 py-16">
       <header className="mb-10 flex items-center">
-        <h1 className="text-lg font-semibold tracking-tight">Research</h1>
+        <h1 className="font-serif text-xl font-semibold tracking-tight">Folio</h1>
         <div className="ml-auto flex gap-1">
           <Button variant="ghost" size="icon" onClick={onOpenSettings} aria-label="Settings">
             <SettingsIcon className="size-4" />

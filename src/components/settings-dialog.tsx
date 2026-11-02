@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { clearModelCache } from "@/components/chat/model-picker"
+import { ThemePicker } from "@/components/theme-picker"
 import { useTheme } from "@/hooks/use-theme"
 import { api, type ProviderStatus, type PublicSettings } from "@/lib/api"
 import { cn } from "@/lib/utils"
@@ -65,6 +66,10 @@ export function SettingsDialog({
               </Button>
             ))}
           </div>
+        </div>
+        <div className="flex items-start justify-between gap-4">
+          <Label className="pt-2">Theme</Label>
+          <ThemePicker />
         </div>
       </DialogContent>
     </Dialog>

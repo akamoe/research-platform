@@ -20,7 +20,7 @@ function headers(provider: ProviderId, apiKey: string, kind: "openai" | "anthrop
   const h: Record<string, string> = { authorization: `Bearer ${apiKey}`, "content-type": "application/json" }
   if (provider === "openrouter") {
     h["HTTP-Referer"] = "http://localhost"
-    h["X-Title"] = "Research Platform"
+    h["X-Title"] = "Folio"
   }
   return h
 }

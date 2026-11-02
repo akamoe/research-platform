@@ -435,7 +435,7 @@ function PageView({
               </a>
             </span>
           ))}
-          {page.generated && <span> · written by {page.generated.by.replace(/^research-platform\//, "")}</span>}
+          {page.generated && <span> · written by {page.generated.by.replace(/^(research-platform|folio)\//, "")}</span>}
         </div>
       )}
     </div>

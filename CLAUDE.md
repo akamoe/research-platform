@@ -1,4 +1,4 @@
-# Research Platform
+# Folio (repo: research-platform)
 
 Local-first web app for students writing research papers. Hard product rule: the AI must never write the student's paper; see `server/mentor.ts`, which is sent as the system prompt for every model.
 

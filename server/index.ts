@@ -111,8 +111,8 @@ api.post("/projects/:id/notes", async (c) => {
   return c.json({ path: await projects.createNote(c.req.param("id"), body.name, body.content) }, 201)
 })
 api.patch("/projects/:id/note", async (c) => {
-  const body = z.object({ name: z.string() }).parse(await c.req.json())
-  return c.json({ path: await projects.renameNote(c.req.param("id"), notePathParam(c), body.name) })
+  const body = z.object({ name: z.string(), unique: z.boolean().optional() }).parse(await c.req.json())
+  return c.json({ path: await projects.renameNote(c.req.param("id"), notePathParam(c), body.name, body.unique) })
 })
 api.delete("/projects/:id/note", async (c) => {
   await projects.deleteNote(c.req.param("id"), notePathParam(c))

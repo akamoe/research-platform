@@ -168,13 +168,16 @@ export async function createNote(id: string, name: string, content = "", folder 
   return rel
 }
 
-export async function renameNote(id: string, from: string, toName: string) {
+/** Rename a note in its folder. With `unique`, a taken name gets a number ("Name 2") instead of failing. */
+export async function renameNote(id: string, from: string, toName: string, unique = false) {
   const src = notePath(id, from)
   if (!(await exists(src))) throw new HttpError(404, "Note not found")
   const base = toName.trim().replace(/[\\/:*?"<>|]/g, "-").replace(/\.md$/i, "")
   if (!base) throw new HttpError(400, "Name is required")
   const dir = path.posix.dirname(from)
-  const rel = (dir === "." ? "" : dir + "/") + base + ".md"
+  const at = (name: string) => (dir === "." ? "" : dir + "/") + name + ".md"
+  let rel = at(base)
+  for (let i = 2; unique && notePath(id, rel) !== src && (await exists(notePath(id, rel))); i++) rel = at(`${base} ${i}`)
   const dest = notePath(id, rel)
   if (dest !== src && (await exists(dest))) throw new HttpError(409, "A note with that name already exists")
   await fs.rename(src, dest)

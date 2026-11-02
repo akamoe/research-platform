@@ -183,8 +183,8 @@ export const api = {
     request(`/projects/${id}/note${q(path)}`, json("PUT", { content })),
   createNote: (id: string, name: string, content?: string) =>
     request<{ path: string }>(`/projects/${id}/notes`, json("POST", { name, content })),
-  renameNote: (id: string, path: string, name: string) =>
-    request<{ path: string }>(`/projects/${id}/note${q(path)}`, json("PATCH", { name })),
+  renameNote: (id: string, path: string, name: string, unique?: boolean) =>
+    request<{ path: string }>(`/projects/${id}/note${q(path)}`, json("PATCH", { name, unique })),
   deleteNote: (id: string, path: string) => request(`/projects/${id}/note${q(path)}`, { method: "DELETE" }),
 
   chats: (id: string, sourceId?: string) =>

@@ -82,6 +82,16 @@ export function ProjectPage({ projectId, notePath, paperId, view, kbPage, settin
   >(null)
   const [chatOpen, setChatOpen] = useState(() => localStorage.getItem("rp-chat-open") === "1")
 
+  // A note keeps its editor when it's renamed, so typing isn't interrupted; any other note gets a fresh one.
+  const renamedTo = useRef<string | null>(null)
+  const pane = useRef<{ path?: string; key?: string }>({})
+  if (pane.current.path !== notePath) {
+    if (!notePath || renamedTo.current !== notePath || !pane.current.key) pane.current.key = notePath
+    pane.current.path = notePath
+    renamedTo.current = null
+  }
+  const paneKey = pane.current.key
+
   const refreshNotes = useCallback(() => api.notes(projectId).then(setNotes), [projectId])
 
   useEffect(() => {
@@ -380,14 +390,17 @@ export function ProjectPage({ projectId, notePath, paperId, view, kbPage, settin
               ) : null
             ) : notePath ? (
               <NotePane
-                key={notePath}
+                key={paneKey}
                 projectId={projectId}
                 path={notePath}
                 chatOpen={chatOpen}
                 onToggleChat={() => setChatOpen((o) => !o)}
-                onRenamed={async (path) => {
+                onRenamed={async (path, stay) => {
+                  if (stay) {
+                    renamedTo.current = path
+                    navigate({ name: "project", projectId, note: path }, true)
+                  }
                   await refreshNotes()
-                  navigate({ name: "project", projectId, note: path }, true)
                 }}
               />
             ) : (
@@ -448,6 +461,22 @@ export function ProjectPage({ projectId, notePath, paperId, view, kbPage, settin
   )
 }
 
+const baseName = (path: string) => path.replace(/\.md$/i, "").split("/").pop() ?? ""
+
+/** The note's title: its first line, if that's a top-level heading. Cleaned up to work as a file name. */
+function headingOf(md: string) {
+  const first = md.split("\n").find((l) => l.trim())
+  const m = first ? /^#\s+(.+?)\s*#*\s*$/.exec(first.trim()) : null
+  if (!m) return ""
+  return m[1]
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/[*_`~]/g, "")
+    .replace(/[\\/:?"<>|]/g, "-")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 100)
+}
+
 function NotePane({
   projectId,
   path,
@@ -459,23 +488,58 @@ function NotePane({
   path: string
   chatOpen: boolean
   onToggleChat: () => void
-  onRenamed: (path: string) => void
+  onRenamed: (path: string, stay: boolean) => void
 }) {
-  const { content, status, save, sync } = useNote(projectId, path)
+  const { content, status, save: saveNote, sync, rename: renameFile } = useNote(projectId, path)
   const [source, setSource] = useState(false)
-  const [title, setTitle] = useState(path.replace(/\.md$/i, "").split("/").pop() ?? "")
+  const [title, setTitle] = useState(baseName(path))
+  useEffect(() => setTitle(baseName(path)), [path])
+
+  // The file name follows the note's first heading, until the student names the note themselves.
+  const follows = useRef<boolean | null>(null)
+  if (follows.current === null && content !== null) {
+    const name = baseName(path)
+    follows.current = /^Untitled( \d+)?$/.test(name) || name.replace(/ \d+$/, "") === headingOf(content)
+  }
+  const pathRef = useRef(path)
+  pathRef.current = path
+  const renameTimer = useRef<number | undefined>(undefined)
+  const pendingName = useRef<string | null>(null)
+  const renameToHeading = (stay = true) => {
+    window.clearTimeout(renameTimer.current)
+    const name = pendingName.current
+    pendingName.current = null
+    if (!name) return
+    renameFile(name, true).then(
+      (p) => onRenamed(p, stay),
+      (err) => toast.error(`Couldn't rename the note: ${err.message}`),
+    )
+  }
+  // Leaving the note before the rename ran: still rename it, but don't pull the student back.
+  useEffect(() => () => renameToHeading(false), []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const save = (md: string) => {
+    saveNote(md)
+    const heading = headingOf(md)
+    const name = baseName(pathRef.current)
+    if (!follows.current || !heading || heading === name || heading === name.replace(/ \d+$/, "")) return
+    pendingName.current = heading
+    window.clearTimeout(renameTimer.current)
+    renameTimer.current = window.setTimeout(renameToHeading, 800)
+  }
 
   const rename = async () => {
-    const current = path.replace(/\.md$/i, "").split("/").pop()
+    const current = baseName(path)
     if (!title.trim() || title.trim() === current) {
-      setTitle(current ?? "")
+      setTitle(current)
       return
     }
     try {
-      onRenamed((await api.renameNote(projectId, path, title)).path)
+      onRenamed(await renameFile(title), true)
+      follows.current = false
     } catch (err) {
       toast.error((err as Error).message)
-      setTitle(current ?? "")
+      setTitle(current)
     }
   }
 

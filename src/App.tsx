@@ -36,7 +36,7 @@ export default function App() {
         {settings && (
           <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} settings={settings} onSettings={setSettings} />
         )}
-        <Toaster position="bottom-center" />
+        <Toaster position="top-center" />
       </TooltipProvider>
     </ThemeProvider>
   )

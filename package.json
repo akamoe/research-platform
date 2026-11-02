@@ -44,6 +44,7 @@
     "hono": "^4.13.16",
     "lucide-react": "^1.66.0",
     "open": "^11.0.4",
+    "perfect-freehand": "^1.2.3",
     "platejs": "^53.5.2",
     "radix-ui": "^1.8.1",
     "react": "^19.3.1",

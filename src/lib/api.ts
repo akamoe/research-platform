@@ -112,9 +112,28 @@ export interface CanvasLink {
   relation: "supports" | "contradicts" | "related" | "answers" | "example-of"
   why: string
 }
+export interface CanvasShape {
+  id: string
+  type: "rect" | "ellipse" | "text" | "draw" | "arrow"
+  x: number
+  y: number
+  w: number
+  h: number
+  color: string
+  text?: string
+  points?: [number, number][]
+}
+export interface CanvasArrow {
+  id: string
+  from: string
+  to: string
+  color: string
+}
 export interface CanvasData {
   cards: CanvasCard[]
   links: CanvasLink[]
+  shapes?: CanvasShape[]
+  arrows?: CanvasArrow[]
   synthesis?: { at: string; themes: { title: string; insight: string; cards: string[] }[]; questions: string[] }
   thinking?: boolean
 }
@@ -211,13 +230,15 @@ export const api = {
   lintKnowledge: (id: string) => request<{ at: string; findings: KbFinding[] }>(`/projects/${id}/knowledge/lint`, { method: "POST" }),
 
   canvas: (id: string) => request<CanvasData>(`/projects/${id}/canvas`),
-  addCard: (id: string, card: { text: string; x: number; y: number }) =>
+  addCard: (id: string, card: { text: string; x: number; y: number; kind?: CardKind }) =>
     request<CanvasCard>(`/projects/${id}/canvas/cards`, json("POST", card)),
   updateCard: (id: string, cardId: string, patch: { text?: string; x?: number; y?: number; kind?: CardKind }) =>
     request<CanvasCard>(`/projects/${id}/canvas/cards/${cardId}`, json("PATCH", patch)),
   removeCard: (id: string, cardId: string) => request(`/projects/${id}/canvas/cards/${cardId}`, { method: "DELETE" }),
   restoreCard: (id: string, cardId: string) =>
     request<CanvasCard>(`/projects/${id}/canvas/cards/${cardId}/restore`, { method: "POST" }),
+  saveDrawing: (id: string, drawing: { shapes: CanvasShape[]; arrows: CanvasArrow[] }) =>
+    request<{ shapes: CanvasShape[]; arrows: CanvasArrow[] }>(`/projects/${id}/canvas/drawing`, json("PUT", drawing)),
   think: (id: string) => request<CanvasData>(`/projects/${id}/canvas/think`, { method: "POST" }),
 }
 

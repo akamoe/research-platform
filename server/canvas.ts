@@ -49,9 +49,33 @@ export interface Synthesis {
   questions: string[]
 }
 
+/** Things the student draws: frames, ellipses, labels, pen strokes. The AI ignores them. */
+export interface Shape {
+  id: string
+  type: "rect" | "ellipse" | "text" | "draw" | "arrow"
+  x: number
+  y: number
+  w: number
+  h: number
+  color: string
+  text?: string
+  /** Pen strokes: points scaled to 0..1 inside the box, so resizing stretches them. */
+  points?: [number, number][]
+}
+
+/** An arrow the student drew between two cards or shapes. */
+export interface Arrow {
+  id: string
+  from: string
+  to: string
+  color: string
+}
+
 export interface Canvas {
   cards: Card[]
   links: Link[]
+  shapes?: Shape[]
+  arrows?: Arrow[]
   synthesis?: Synthesis
   /** Removed cards are kept here for a while, never just dropped. */
   removed?: Card[]
@@ -68,9 +92,16 @@ export async function readCanvas(projectId: string): Promise<Canvas> {
   await getProject(projectId)
   try {
     const c = JSON.parse(await fs.readFile(file(projectId), "utf8")) as Canvas
-    return { cards: c.cards ?? [], links: c.links ?? [], synthesis: c.synthesis, removed: c.removed ?? [] }
+    return {
+      cards: c.cards ?? [],
+      links: c.links ?? [],
+      shapes: c.shapes ?? [],
+      arrows: c.arrows ?? [],
+      synthesis: c.synthesis,
+      removed: c.removed ?? [],
+    }
   } catch {
-    return { cards: [], links: [], removed: [] }
+    return { cards: [], links: [], shapes: [], arrows: [], removed: [] }
   }
 }
 
@@ -98,10 +129,12 @@ export function parseKind(text: string): { text: string; kind?: CardKind } {
   return { text: text.trim() }
 }
 
-export function addCard(projectId: string, input: { text: string; x: number; y: number }) {
+export function addCard(projectId: string, input: { text: string; x: number; y: number; kind?: CardKind }) {
   return locked(projectId, async () => {
     const c = await readCanvas(projectId)
-    const { text, kind } = parseKind(input.text)
+    const parsed = parseKind(input.text)
+    const text = parsed.text
+    const kind = input.kind ?? parsed.kind
     if (!text) throw new HttpError(400, "Write something first")
     const t = now()
     const card: Card = {
@@ -158,6 +191,7 @@ export function removeCard(projectId: string, cardId: string) {
     if (!card) throw new HttpError(404, "Card not found")
     c.cards = c.cards.filter((x) => x.id !== cardId)
     c.links = c.links.filter((l) => l.from !== cardId && l.to !== cardId)
+    c.arrows = (c.arrows ?? []).filter((a) => a.from !== cardId && a.to !== cardId)
     c.removed = [{ ...card, updatedAt: now() }, ...(c.removed ?? [])].slice(0, 200)
     if (c.synthesis) c.synthesis.themes = c.synthesis.themes.map((t) => ({ ...t, cards: t.cards.filter((id) => id !== cardId) }))
     await writeCanvas(projectId, c)
@@ -173,6 +207,18 @@ export function restoreCard(projectId: string, cardId: string) {
     c.cards.push({ ...card, analyzedAt: undefined })
     await writeCanvas(projectId, c)
     return card
+  })
+}
+
+/** The client sends the whole drawing layer; it's small, and this keeps undo simple. */
+export function saveDrawing(projectId: string, drawing: { shapes: Shape[]; arrows: Arrow[] }) {
+  return locked(projectId, async () => {
+    const c = await readCanvas(projectId)
+    const ids = new Set([...c.cards.map((x) => x.id), ...drawing.shapes.map((x) => x.id)])
+    c.shapes = drawing.shapes
+    c.arrows = drawing.arrows.filter((a) => ids.has(a.from) && ids.has(a.to) && a.from !== a.to)
+    await writeCanvas(projectId, c)
+    return { shapes: c.shapes, arrows: c.arrows }
   })
 }
 

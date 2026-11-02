@@ -1,76 +1,48 @@
-import { createContext, memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Background,
-  BaseEdge,
   Controls,
-  Handle,
-  Position,
   ReactFlow,
   ReactFlowProvider,
-  getStraightPath,
-  useInternalNode,
+  useEdgesState,
   useNodesState,
   useReactFlow,
-  type Edge,
-  type EdgeProps,
-  type InternalNode,
-  type Node,
-  type NodeProps,
 } from "@xyflow/react"
 import "@xyflow/react/dist/base.css"
-import { BookMarkedIcon, LoaderCircleIcon, MessageSquareIcon, SparklesIcon } from "lucide-react"
+import { LoaderCircleIcon, MessageSquareIcon, SparklesIcon } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Textarea } from "@/components/ui/textarea"
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { api, type CanvasCard, type CanvasData, type CanvasLink, type CardKind } from "@/lib/api"
-import { navigate } from "@/lib/router"
+import { api, type CanvasArrow, type CanvasData, type CanvasLink, type CanvasShape, type CardKind } from "@/lib/api"
 import { cn } from "@/lib/utils"
-
-const KINDS: { id: CardKind; label: string; color: string }[] = [
-  { id: "note", label: "note", color: "var(--muted-foreground)" },
-  { id: "question", label: "question", color: "oklch(0.72 0.15 75)" },
-  { id: "claim", label: "claim", color: "oklch(0.6 0.15 250)" },
-  { id: "evidence", label: "evidence", color: "oklch(0.62 0.14 155)" },
-  { id: "idea", label: "idea", color: "oklch(0.6 0.17 300)" },
-  { id: "quote", label: "quote", color: "oklch(0.55 0.03 60)" },
-  { id: "definition", label: "definition", color: "oklch(0.62 0.1 200)" },
-  { id: "task", label: "task", color: "oklch(0.66 0.16 45)" },
-  { id: "source", label: "source", color: "oklch(0.55 0.02 260)" },
-]
-const kindOf = (k: CardKind) => KINDS.find((x) => x.id === k) ?? KINDS[0]
-
-const RELATION_STYLE: Record<CanvasLink["relation"], { stroke: string; dash?: string; label: string }> = {
-  contradicts: { stroke: "var(--destructive)", dash: "6 4", label: "contradicts" },
-  supports: { stroke: "oklch(0.62 0.14 155)", label: "supports" },
-  answers: { stroke: "oklch(0.6 0.15 250)", label: "answers" },
-  "example-of": { stroke: "oklch(0.6 0.17 300)", label: "example of" },
-  related: { stroke: "var(--muted-foreground)", label: "related" },
-}
-
-const CARD_W = 240
-const CARD_H = 120
-
-type CardNode = Node<{ card: CanvasCard }, "card">
-type LinkEdge = Edge<{ link: CanvasLink }, "link">
-
-interface Ctx {
-  projectId: string
-  reading: boolean
-  focus: Set<string>
-  edit: (id: string, text: string) => void
-  setKind: (id: string, kind: CardKind) => void
-}
-const CanvasCtx = createContext<Ctx | null>(null)
+import { CardNodeView } from "./card-node"
+import { ArrowEdgeView, DrawOverlay, LinkEdgeView, ShapeNodeView, TOOLS, Toolbar } from "./drawing"
+import {
+  CARD_H,
+  CARD_W,
+  CanvasCtx,
+  KINDS,
+  RELATION_STYLE,
+  newId,
+  type AnyEdge,
+  type AnyNode,
+  type CardNode,
+  type Ctx,
+  type ShapeNode,
+  type Tool,
+} from "./shared"
 
 interface Props {
   projectId: string
   chatOpen: boolean
   onToggleChat: () => void
 }
+
+type Drawing = { shapes: CanvasShape[]; arrows: CanvasArrow[] }
 
 export function CanvasView(props: Props) {
   return (
@@ -82,54 +54,173 @@ export function CanvasView(props: Props) {
 
 function CanvasInner({ projectId, chatOpen, onToggleChat }: Props) {
   const [data, setData] = useState<CanvasData | null>(null)
-  const [nodes, setNodes, onNodesChange] = useNodesState<CardNode>([])
+  const [nodes, setNodes, onNodesChange] = useNodesState<AnyNode>([])
+  const [edges, setEdges, onEdgesChange] = useEdgesState<AnyEdge>([])
   const [reading, setReading] = useState(false)
   const [aiOff, setAiOff] = useState<string | null>(null)
   const [themesOpen, setThemesOpen] = useState(() => localStorage.getItem("rp-canvas-themes") !== "0")
   const [focus, setFocus] = useState<Set<string>>(new Set())
-  const flow = useReactFlow<CardNode, LinkEdge>()
+  const [tool, setTool] = useState<Tool>("select")
+  const [color, setColor] = useState(() => localStorage.getItem("rp-canvas-color") ?? "default")
+  const [editingShape, setEditingShape] = useState<string | null>(null)
+  const [pageTitles, setPageTitles] = useState<Record<string, string>>({})
+  const flow = useReactFlow<AnyNode, AnyEdge>()
   const wrapper = useRef<HTMLDivElement>(null)
   const timer = useRef<number | undefined>(undefined)
 
   useEffect(() => {
     api.canvas(projectId).then(setData, (e) => toast.error(e.message))
+    api.knowledge(projectId).then(
+      (k) => setPageTitles(Object.fromEntries(k.pages.map((p) => [p.id, p.title]))),
+      () => {},
+    )
   }, [projectId])
 
-  // Cards -> React Flow nodes, keeping a card where it is while it's being dragged.
+  // Cards and shapes -> React Flow nodes, keeping a node where it is while it's dragged or resized.
   useEffect(() => {
     if (!data) return
-    setNodes((prev) =>
-      data.cards.map((card) => {
-        const old = prev.find((n) => n.id === card.id)
+    setNodes((prev) => {
+      const old = new Map(prev.map((n) => [n.id, n]))
+      const pos = (id: string, x: number, y: number) => {
+        const o = old.get(id)
+        return o?.dragging || o?.resizing ? o.position : { x, y }
+      }
+      const shapeNode = (shape: CanvasShape): ShapeNode => {
+        const o = old.get(shape.id) as ShapeNode | undefined
+        const sized = shape.type !== "text"
         return {
-          ...(old ?? {}),
-          id: card.id,
-          type: "card" as const,
-          position: old?.dragging ? old.position : { x: card.x, y: card.y },
-          data: { card },
+          ...o,
+          id: shape.id,
+          type: "shape",
+          position: pos(shape.id, shape.x, shape.y),
+          data: { shape },
+          // Boxes sit behind cards so they can group them; strokes, arrows and text sit on top.
+          zIndex: shape.type === "rect" || shape.type === "ellipse" ? -1 : 1,
+          width: sized ? (o?.resizing ? o.width : shape.w) : undefined,
+          height: sized ? (o?.resizing ? o.height : shape.h) : undefined,
+          // Strokes and loose arrows only catch the pointer on the line itself, not their whole box.
+          style: shape.type === "draw" || shape.type === "arrow" ? { pointerEvents: "none" } : undefined,
         }
-      }),
-    )
+      }
+      const cardNode = (card: CanvasData["cards"][number]): CardNode => ({
+        ...(old.get(card.id) as CardNode | undefined),
+        id: card.id,
+        type: "card",
+        position: pos(card.id, card.x, card.y),
+        data: { card },
+      })
+      return [...(data.shapes ?? []).map(shapeNode), ...data.cards.map(cardNode)]
+    })
   }, [data, setNodes])
 
-  const edges = useMemo<LinkEdge[]>(
-    () =>
-      (data?.links ?? []).map((link) => ({
-        id: link.id,
-        source: link.from,
-        target: link.to,
-        type: "link" as const,
-        data: { link },
-      })),
-    [data],
+  useEffect(() => {
+    if (!data) return
+    setEdges((prev) => {
+      const selected = new Set(prev.filter((e) => e.selected).map((e) => e.id))
+      return [
+        ...data.links.map((link) => ({
+          id: link.id,
+          source: link.from,
+          target: link.to,
+          type: "link" as const,
+          data: { link },
+          selectable: false,
+          deletable: false,
+          focusable: false,
+        })),
+        ...(data.arrows ?? []).map((arrow) => ({
+          id: arrow.id,
+          source: arrow.from,
+          target: arrow.to,
+          type: "arrow" as const,
+          data: { arrow },
+          selected: selected.has(arrow.id),
+        })),
+      ]
+    })
+  }, [data, setEdges])
+
+  // ---------- drawing: saved a moment after the last change ----------
+  const drawing = useRef<Drawing>({ shapes: [], arrows: [] })
+  const dirty = useRef(false)
+  const saveTimer = useRef<number | undefined>(undefined)
+  useEffect(() => {
+    if (data) drawing.current = { shapes: data.shapes ?? [], arrows: data.arrows ?? [] }
+  }, [data])
+
+  const flushDrawing = useCallback(() => {
+    window.clearTimeout(saveTimer.current)
+    if (!dirty.current) return
+    dirty.current = false
+    api.saveDrawing(projectId, drawing.current).catch((e) => toast.error(`Couldn't save the drawing: ${e.message}`))
+  }, [projectId])
+
+  const changeDrawing = useCallback(
+    (fn: (d: Drawing) => Partial<Drawing>) => {
+      setData((d) => (d ? { ...d, ...fn({ shapes: d.shapes ?? [], arrows: d.arrows ?? [] }) } : d))
+      dirty.current = true
+      window.clearTimeout(saveTimer.current)
+      saveTimer.current = window.setTimeout(flushDrawing, 600)
+    },
+    [flushDrawing],
+  )
+  useEffect(() => () => flushDrawing(), [flushDrawing])
+
+  const removeShapes = useCallback(
+    (ids: string[]) => {
+      if (!ids.length) return
+      const gone = new Set(ids)
+      const before = drawing.current
+      changeDrawing((d) => ({
+        shapes: d.shapes.filter((s) => !gone.has(s.id)),
+        arrows: d.arrows.filter((a) => !gone.has(a.from) && !gone.has(a.to)),
+      }))
+      const removed = before.shapes.filter((s) => gone.has(s.id) && (s.type !== "text" || s.text))
+      const removedArrows = before.arrows.filter((a) => gone.has(a.from) || gone.has(a.to))
+      if (!removed.length) return
+      toast(removed.length > 1 ? "Shapes removed" : "Shape removed", {
+        action: {
+          label: "Undo",
+          onClick: () => changeDrawing((d) => ({ shapes: [...d.shapes, ...removed], arrows: [...d.arrows, ...removedArrows] })),
+        },
+      })
+    },
+    [changeDrawing],
   )
 
-  // The AI reads new and edited cards a moment after the student stops writing.
+  const addShape = (shape: CanvasShape) => {
+    changeDrawing((d) => ({ shapes: [...d.shapes, shape] }))
+    if (shape.type === "text") setEditingShape(shape.id)
+    if (shape.type !== "draw") setTool("select")
+  }
+
+  /** An arrow drawn from one card or shape to another. Returns false if it doesn't start and end on one. */
+  const addArrow = (from: { x: number; y: number }, to: { x: number; y: number }) => {
+    const rank = (n: AnyNode) => {
+      if (n.type === "card") return 0
+      const s = n.data.shape
+      return s.type === "text" ? 1 : 2 + (s.w * s.h) / 1e9
+    }
+    const at = (p: { x: number; y: number }) =>
+      flow
+        .getIntersectingNodes({ x: p.x - 2, y: p.y - 2, width: 4, height: 4 }, true)
+        .filter((n) => !(n.type === "shape" && (n.data.shape.type === "draw" || n.data.shape.type === "arrow")))
+        .sort((a, b) => rank(a) - rank(b))[0]
+    const a = at(from)
+    const b = at(to)
+    if (!a || !b || a.id === b.id) return false
+    changeDrawing((d) => ({ arrows: [...d.arrows, { id: newId("a"), from: a.id, to: b.id, color }] }))
+    setTool("select")
+    return true
+  }
+
+  // ---------- the AI reads new and edited cards a moment after the student stops writing ----------
   const think = useCallback(async () => {
     setReading(true)
     try {
       const next = await api.think(projectId)
-      setData(next)
+      // Keep the drawing as it is here; it may have changes that aren't saved yet.
+      setData((d) => ({ ...next, shapes: d?.shapes ?? next.shapes, arrows: d?.arrows ?? next.arrows }))
       setAiOff(null)
     } catch (err) {
       const msg = (err as Error).message
@@ -152,17 +243,35 @@ function CanvasInner({ projectId, chatOpen, onToggleChat }: Props) {
     if (unread && !reading && !aiOff) scheduleThink()
   }, [unread]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Tool shortcuts, like most drawing apps. Off while a text box is about to take the typing.
+  const editingRef = useRef(editingShape)
+  editingRef.current = editingShape
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey || editingRef.current) return
+      if ((e.target as HTMLElement).closest?.("input, textarea, select, [contenteditable='true'], [role='dialog'], [role='menu']")) return
+      if (e.key === "Escape") return setTool("select")
+      const t = TOOLS.find((x) => x.key.toLowerCase() === e.key.toLowerCase())
+      if (t) {
+        e.preventDefault()
+        setTool(t.id)
+      }
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [])
+
   /** A free spot near the middle of what the student is looking at. */
   const freeSpot = () => {
     const box = wrapper.current?.getBoundingClientRect()
-    const center = box
+    const mid = box
       ? flow.screenToFlowPosition({ x: box.left + box.width / 2, y: box.top + box.height / 2 - 60 })
       : { x: 0, y: 0 }
     const cards = data?.cards ?? []
     const taken = (x: number, y: number) =>
       cards.some((c) => Math.abs(c.x - x) < CARD_W + 16 && Math.abs(c.y - y) < CARD_H + 16)
-    const sx = center.x - CARD_W / 2
-    const sy = center.y - CARD_H / 2
+    const sx = mid.x - CARD_W / 2
+    const sy = mid.y - CARD_H / 2
     for (let ring = 0; ring < 8; ring++) {
       for (let dy = -ring; dy <= ring; dy++) {
         for (let dx = -ring; dx <= ring; dx++) {
@@ -176,9 +285,9 @@ function CanvasInner({ projectId, chatOpen, onToggleChat }: Props) {
     return { x: Math.round(sx), y: Math.round(sy + (CARD_H + 24) * 8) }
   }
 
-  const add = async (text: string) => {
+  const add = async (text: string, kind?: CardKind) => {
     try {
-      const card = await api.addCard(projectId, { text, ...freeSpot() })
+      const card = await api.addCard(projectId, { text, kind, ...freeSpot() })
       setData((d) => (d ? { ...d, cards: [...d.cards, card] } : d))
       scheduleThink()
     } catch (err) {
@@ -191,6 +300,7 @@ function CanvasInner({ projectId, chatOpen, onToggleChat }: Props) {
       projectId,
       reading,
       focus,
+      pageTitle: (id) => pageTitles[id] ?? id.split("/").pop()?.replace(/-/g, " ") ?? id,
       edit: async (id, text) => {
         try {
           const card = await api.updateCard(projectId, id, { text })
@@ -217,16 +327,27 @@ function CanvasInner({ projectId, chatOpen, onToggleChat }: Props) {
           toast.error((err as Error).message)
         }
       },
+      editingShape,
+      setEditingShape,
+      updateShape: (id, patch) => changeDrawing((d) => ({ shapes: d.shapes.map((s) => (s.id === id ? { ...s, ...patch } : s)) })),
+      removeShapes,
     }),
-    [projectId, reading, focus, scheduleThink],
+    [projectId, reading, focus, pageTitles, scheduleThink, editingShape, changeDrawing, removeShapes],
   )
 
-  const remove = async (ids: string[]) => {
+  const removeCards = async (ids: string[]) => {
     for (const id of ids) {
       try {
         await api.removeCard(projectId, id)
         setData((d) =>
-          d ? { ...d, cards: d.cards.filter((c) => c.id !== id), links: d.links.filter((l) => l.from !== id && l.to !== id) } : d,
+          d
+            ? {
+                ...d,
+                cards: d.cards.filter((c) => c.id !== id),
+                links: d.links.filter((l) => l.from !== id && l.to !== id),
+                arrows: (d.arrows ?? []).filter((a) => a.from !== id && a.to !== id),
+              }
+            : d,
         )
         toast("Card removed", {
           action: {
@@ -242,6 +363,18 @@ function CanvasInner({ projectId, chatOpen, onToggleChat }: Props) {
         toast.error((err as Error).message)
       }
     }
+  }
+
+  const selectedShapes = nodes.filter((n) => n.selected && n.type === "shape").map((n) => n.id)
+  const selectedArrows = edges.filter((e) => e.selected && e.type === "arrow").map((e) => e.id)
+  const pickColor = (c: string) => {
+    setColor(c)
+    localStorage.setItem("rp-canvas-color", c)
+    if (!selectedShapes.length && !selectedArrows.length) return
+    changeDrawing((d) => ({
+      shapes: d.shapes.map((s) => (selectedShapes.includes(s.id) ? { ...s, color: c } : s)),
+      arrows: d.arrows.map((a) => (selectedArrows.includes(a.id) ? { ...a, color: c } : a)),
+    }))
   }
 
   const showCards = (ids: string[]) => {
@@ -266,6 +399,8 @@ function CanvasInner({ projectId, chatOpen, onToggleChat }: Props) {
         : data?.cards.length
           ? "Up to date"
           : ""
+
+  const empty = data && data.cards.length === 0 && !data.shapes?.length
 
   return (
     <CanvasCtx.Provider value={ctx}>
@@ -309,21 +444,35 @@ function CanvasInner({ projectId, chatOpen, onToggleChat }: Props) {
         <div className="flex min-h-0 flex-1 border-t">
           <div ref={wrapper} className="relative min-w-0 flex-1">
             {data && (
-              <ReactFlow<CardNode, LinkEdge>
+              <ReactFlow<AnyNode, AnyEdge>
                 nodes={nodes}
                 edges={edges}
                 nodeTypes={nodeTypes}
                 edgeTypes={edgeTypes}
                 onNodesChange={onNodesChange}
-                onNodeDragStop={(_, node) => {
-                  const x = Math.round(node.position.x)
-                  const y = Math.round(node.position.y)
-                  setData((d) => (d ? { ...d, cards: d.cards.map((c) => (c.id === node.id ? { ...c, x, y } : c)) } : d))
-                  api.updateCard(projectId, node.id, { x, y }).catch(() => {})
+                onEdgesChange={onEdgesChange}
+                onNodeDragStop={(_, __, dragged) => {
+                  const moved = new Map(dragged.map((n) => [n.id, { x: Math.round(n.position.x), y: Math.round(n.position.y) }]))
+                  const cards = dragged.filter((n) => n.type === "card")
+                  if (cards.length) {
+                    setData((d) => (d ? { ...d, cards: d.cards.map((c) => ({ ...c, ...moved.get(c.id) })) } : d))
+                    for (const n of cards) api.updateCard(projectId, n.id, moved.get(n.id)!).catch(() => {})
+                  }
+                  if (dragged.some((n) => n.type === "shape")) {
+                    changeDrawing((d) => ({ shapes: d.shapes.map((s) => ({ ...s, ...moved.get(s.id) })) }))
+                  }
                 }}
-                onNodesDelete={(ns) => remove(ns.map((n) => n.id))}
+                onNodesDelete={(ns) => {
+                  removeCards(ns.filter((n) => n.type === "card").map((n) => n.id))
+                  removeShapes(ns.filter((n) => n.type === "shape").map((n) => n.id))
+                }}
+                onEdgesDelete={(es) => {
+                  const gone = new Set(es.filter((e) => e.type === "arrow").map((e) => e.id))
+                  if (gone.size) changeDrawing((d) => ({ arrows: d.arrows.filter((a) => !gone.has(a.id)) }))
+                }}
                 deleteKeyCode={["Delete", "Backspace"]}
                 nodesConnectable={false}
+                elevateNodesOnSelect={false}
                 fitView
                 fitViewOptions={{ maxZoom: 1, padding: 0.3 }}
                 minZoom={0.2}
@@ -332,10 +481,15 @@ function CanvasInner({ projectId, chatOpen, onToggleChat }: Props) {
                 className="bg-muted/40"
               >
                 <Background gap={24} size={1} color="var(--border)" />
-                <Controls showInteractive={false} position="bottom-left" className="overflow-hidden rounded-md border bg-background shadow-sm [&_button]:border-b [&_button]:bg-background [&_button]:fill-foreground [&_button:hover]:bg-muted" />
+                <Controls
+                  showInteractive={false}
+                  position="bottom-left"
+                  className="overflow-hidden rounded-lg border bg-background shadow-xs [&_button]:border-b [&_button]:bg-background [&_button]:fill-foreground [&_button:hover]:bg-muted"
+                />
               </ReactFlow>
             )}
-            {data && data.cards.length === 0 && (
+            {tool !== "select" && <DrawOverlay tool={tool} color={color} onShape={addShape} onArrow={addArrow} />}
+            {empty && tool === "select" && (
               <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-8">
                 <div className="max-w-sm text-center text-sm text-muted-foreground">
                   <p className="font-medium text-foreground">Write whatever you're thinking.</p>
@@ -346,6 +500,7 @@ function CanvasInner({ projectId, chatOpen, onToggleChat }: Props) {
                 </div>
               </div>
             )}
+            <Toolbar tool={tool} onTool={setTool} color={color} onColor={pickColor} />
             {!!data?.links.length && <Legend relations={[...new Set(data.links.map((l) => l.relation))]} />}
             <Composer onAdd={add} />
           </div>
@@ -359,7 +514,7 @@ function CanvasInner({ projectId, chatOpen, onToggleChat }: Props) {
 /** Which line means what, for the kinds of links on this canvas. Hover a line for the reason. */
 function Legend({ relations }: { relations: CanvasLink["relation"][] }) {
   return (
-    <div className="pointer-events-none absolute right-3 bottom-4 flex flex-col gap-1 rounded-md border bg-background/90 px-2.5 py-2 text-[11px] text-muted-foreground max-lg:hidden">
+    <div className="pointer-events-none absolute top-3 right-3 z-10 flex flex-col gap-1 rounded-lg border bg-background/90 px-2.5 py-2 text-[11px] text-muted-foreground max-lg:hidden">
       {relations.map((r) => (
         <div key={r} className="flex items-center gap-2">
           <svg width="22" height="4" aria-hidden>
@@ -372,17 +527,50 @@ function Legend({ relations }: { relations: CanvasLink["relation"][] }) {
   )
 }
 
-function Composer({ onAdd }: { onAdd: (text: string) => void }) {
+/** Where new thoughts are written. The row above it sets the card's kind; Auto leaves it to the AI. */
+function Composer({ onAdd }: { onAdd: (text: string, kind?: CardKind) => void }) {
   const [text, setText] = useState("")
+  const [kind, setKind] = useState<CardKind | "auto">("auto")
+  const input = useRef<HTMLTextAreaElement>(null)
   const submit = () => {
     if (!text.trim()) return
-    onAdd(text)
+    onAdd(text, kind === "auto" ? undefined : kind)
     setText("")
+    setKind("auto")
   }
+  const pill = "h-6 gap-1.5 rounded-full px-2.5 text-xs font-normal text-muted-foreground data-[state=on]:bg-secondary data-[state=on]:text-foreground"
   return (
-    <div className="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center px-4">
-      <div className="pointer-events-auto w-full max-w-xl rounded-xl border bg-background p-1.5 shadow-lg">
+    <div className="pointer-events-none absolute inset-x-0 bottom-4 z-10 flex justify-center px-4">
+      <div className="pointer-events-auto w-full max-w-2xl rounded-xl border bg-background shadow-lg">
+        <ToggleGroup
+          type="single"
+          size="sm"
+          spacing={1}
+          value={kind}
+          onValueChange={(v) => {
+            setKind((v || "auto") as CardKind | "auto")
+            input.current?.focus()
+          }}
+          className="w-full flex-wrap px-2 pt-2"
+          aria-label="Kind of thought"
+        >
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <ToggleGroupItem value="auto" className={pill}>
+                Auto
+              </ToggleGroupItem>
+            </TooltipTrigger>
+            <TooltipContent>Let the AI sort it</TooltipContent>
+          </Tooltip>
+          {KINDS.filter((k) => k.id !== "note").map((k) => (
+            <ToggleGroupItem key={k.id} value={k.id} className={pill}>
+              <span className="size-1.5 rounded-full" style={{ background: k.color }} />
+              {k.label}
+            </ToggleGroupItem>
+          ))}
+        </ToggleGroup>
         <Textarea
+          ref={input}
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
@@ -392,8 +580,8 @@ function Composer({ onAdd }: { onAdd: (text: string) => void }) {
             }
           }}
           rows={1}
-          placeholder="Write a thought and press Enter. Add #question, #claim, #evidence or #idea to set its kind."
-          className="max-h-40 min-h-9 resize-none border-0 bg-transparent px-2 py-1.5 shadow-none focus-visible:ring-0"
+          placeholder={kind === "auto" ? "Write a thought and press Enter" : `Write a ${KINDS.find((k) => k.id === kind)?.label.toLowerCase()} and press Enter`}
+          className="max-h-40 min-h-10 resize-none border-0 bg-transparent px-3.5 py-2.5 shadow-none focus-visible:ring-0 dark:bg-transparent"
           aria-label="New card"
         />
       </div>
@@ -449,145 +637,5 @@ function Themes({ data, onShow }: { data: CanvasData | null; onShow: (ids: strin
   )
 }
 
-const CardNodeView = memo(function CardNodeView({ data, selected }: NodeProps<CardNode>) {
-  const ctx = useContext(CanvasCtx)!
-  const { card } = data
-  const [editing, setEditing] = useState<string | null>(null)
-  const k = kindOf(card.kind)
-  const unread = !card.analyzedAt || card.updatedAt > card.analyzedAt
-  const finish = () => {
-    if (editing !== null && editing.trim() && editing.trim() !== card.text) ctx.edit(card.id, editing)
-    setEditing(null)
-  }
-  return (
-    <div
-      className={cn(
-        "group flex w-[240px] flex-col gap-1.5 rounded-lg border bg-card p-3 text-card-foreground shadow-sm transition-shadow",
-        selected && "ring-2 ring-ring",
-        ctx.focus.has(card.id) && "ring-2 ring-amber-400",
-      )}
-      style={{ borderTop: `3px solid ${k.color}` }}
-      onDoubleClick={() => editing === null && setEditing(card.text)}
-    >
-      <Handle type="target" position={Position.Top} className="!pointer-events-none !opacity-0" isConnectable={false} />
-      <Handle type="source" position={Position.Bottom} className="!pointer-events-none !opacity-0" isConnectable={false} />
-      <div className="flex items-center gap-1.5">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button className="nodrag text-[11px] font-medium tracking-wide uppercase" style={{ color: k.color }} title="Change kind">
-              {k.label}
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start">
-            {KINDS.map((x) => (
-              <DropdownMenuItem key={x.id} onSelect={() => ctx.setKind(card.id, x.id)}>
-                <span className="size-2 rounded-full" style={{ background: x.color }} />
-                {x.label}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-        {unread && (
-          <span
-            className={cn("ml-auto size-1.5 rounded-full bg-muted-foreground/40", ctx.reading && "animate-pulse bg-muted-foreground")}
-            title="Not read by the AI yet"
-          />
-        )}
-      </div>
-      {editing !== null ? (
-        <Textarea
-          autoFocus
-          value={editing}
-          onChange={(e) => setEditing(e.target.value)}
-          onBlur={finish}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault()
-              finish()
-            }
-            if (e.key === "Escape") setEditing(null)
-            e.stopPropagation()
-          }}
-          className="nodrag nowheel min-h-16 resize-none p-1.5 text-sm"
-        />
-      ) : (
-        <p className="text-sm leading-snug whitespace-pre-wrap">{card.text}</p>
-      )}
-      {card.note && editing === null && (
-        <p className="flex gap-1 text-xs leading-snug text-muted-foreground">
-          <SparklesIcon className="mt-0.5 size-3 shrink-0" />
-          <span>{card.note}</span>
-        </p>
-      )}
-      {(!!card.tags?.length || !!card.pages?.length) && editing === null && (
-        <div className="flex flex-wrap items-center gap-1">
-          {card.tags?.map((t) => (
-            <span key={t} className="rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
-              {t}
-            </span>
-          ))}
-          {card.pages?.map((p) => (
-            <button
-              key={p}
-              className="nodrag flex items-center gap-1 rounded px-1 py-0.5 text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground"
-              title="Open in the knowledge base"
-              onClick={() => navigate({ name: "project", projectId: ctx.projectId, view: "knowledge", page: p })}
-            >
-              <BookMarkedIcon className="size-3" />
-              {p.split("/").pop()?.replace(/-/g, " ")}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-})
-
-/** Where the line from a node's centre towards another point leaves the node's box. */
-function borderPoint(node: InternalNode, toward: { x: number; y: number }) {
-  const w = node.measured.width ?? CARD_W
-  const h = node.measured.height ?? CARD_H
-  const cx = node.internals.positionAbsolute.x + w / 2
-  const cy = node.internals.positionAbsolute.y + h / 2
-  const dx = toward.x - cx
-  const dy = toward.y - cy
-  if (!dx && !dy) return { x: cx, y: cy }
-  const scale = Math.min(Math.abs(w / 2 / (dx || 1e-9)), Math.abs(h / 2 / (dy || 1e-9)))
-  return { x: cx + dx * scale, y: cy + dy * scale }
-}
-
-function center(node: InternalNode) {
-  return {
-    x: node.internals.positionAbsolute.x + (node.measured.width ?? CARD_W) / 2,
-    y: node.internals.positionAbsolute.y + (node.measured.height ?? CARD_H) / 2,
-  }
-}
-
-function LinkEdgeView({ id, source, target, data }: EdgeProps<LinkEdge>) {
-  const s = useInternalNode(source)
-  const t = useInternalNode(target)
-  if (!s || !t || !data) return null
-  const a = borderPoint(s, center(t))
-  const b = borderPoint(t, center(s))
-  const [path] = getStraightPath({ sourceX: a.x, sourceY: a.y, targetX: b.x, targetY: b.y })
-  const st = RELATION_STYLE[data.link.relation] ?? RELATION_STYLE.related
-  return (
-    <g>
-      <title>{`${st.label}: ${data.link.why}`}</title>
-      <BaseEdge
-        id={id}
-        path={path}
-        interactionWidth={16}
-        style={{
-          stroke: st.stroke,
-          strokeWidth: data.link.relation === "contradicts" ? 2 : 1.5,
-          strokeDasharray: st.dash,
-          opacity: data.link.relation === "related" ? 0.45 : 0.85,
-        }}
-      />
-    </g>
-  )
-}
-
-const nodeTypes = { card: CardNodeView }
-const edgeTypes = { link: LinkEdgeView }
+const nodeTypes = { card: CardNodeView, shape: ShapeNodeView }
+const edgeTypes = { link: LinkEdgeView, arrow: ArrowEdgeView }

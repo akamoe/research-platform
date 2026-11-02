@@ -229,7 +229,7 @@ api.get("/projects/:id/canvas", async (c) => {
   return c.json({ ...rest, thinking: canvas.isThinking(id) })
 })
 api.post("/projects/:id/canvas/cards", async (c) => {
-  const body = z.object({ text: z.string().max(4000), x: z.number(), y: z.number() }).parse(await c.req.json())
+  const body = z.object({ text: z.string().max(4000), x: z.number(), y: z.number(), kind: z.enum(canvas.KINDS).optional() }).parse(await c.req.json())
   return c.json(await canvas.addCard(c.req.param("id"), body), 201)
 })
 api.patch("/projects/:id/canvas/cards/:cardId", async (c) => {
@@ -245,6 +245,29 @@ api.delete("/projects/:id/canvas/cards/:cardId", async (c) => {
 api.post("/projects/:id/canvas/cards/:cardId/restore", async (c) =>
   c.json(await canvas.restoreCard(c.req.param("id"), c.req.param("cardId"))),
 )
+const ShapeSchema = z.object({
+  id: z.string().regex(/^[\w-]+$/).max(40),
+  type: z.enum(["rect", "ellipse", "text", "draw", "arrow"]),
+  x: z.number(),
+  y: z.number(),
+  w: z.number().min(1).max(20000),
+  h: z.number().min(1).max(20000),
+  color: z.string().max(40),
+  text: z.string().max(4000).optional(),
+  points: z.array(z.tuple([z.number(), z.number()])).max(5000).optional(),
+})
+const ArrowSchema = z.object({
+  id: z.string().regex(/^[\w-]+$/).max(40),
+  from: z.string().max(40),
+  to: z.string().max(40),
+  color: z.string().max(40),
+})
+api.put("/projects/:id/canvas/drawing", async (c) => {
+  const body = z
+    .object({ shapes: z.array(ShapeSchema).max(2000), arrows: z.array(ArrowSchema).max(2000) })
+    .parse(await c.req.json())
+  return c.json(await canvas.saveDrawing(c.req.param("id"), body))
+})
 api.post("/projects/:id/canvas/think", async (c) => {
   const { removed: _r, ...rest } = await canvas.think(c.req.param("id"))
   return c.json(rest)

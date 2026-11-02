@@ -1,0 +1,127 @@
+export interface Project {
+  id: string
+  name: string
+  description: string
+  createdAt: string
+  updatedAt: string
+}
+export interface NoteFile {
+  path: string
+  name: string
+  updatedAt: string
+  size: number
+}
+export type ProviderId = "openai" | "anthropic" | "openrouter" | "opencode-go"
+export interface ProviderStatus {
+  id: ProviderId
+  label: string
+  configured: boolean
+  keyHint: string | null
+  baseUrl: string
+  defaultBaseUrl: string
+}
+export interface PublicSettings {
+  providers: ProviderStatus[]
+  defaultModel: { provider: ProviderId; model: string } | null
+}
+export interface ChatMessage {
+  role: "user" | "assistant"
+  content: string
+}
+export interface ChatMeta {
+  id: string
+  title: string
+  createdAt: string
+  updatedAt: string
+  model?: { provider: ProviderId; model: string }
+}
+export interface Chat extends ChatMeta {
+  messages: ChatMessage[]
+}
+
+async function request<T>(url: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`/api${url}`, {
+    ...init,
+    headers: init?.body ? { "content-type": "application/json", ...init.headers } : init?.headers,
+  })
+  if (!res.ok) {
+    let msg = `Request failed (${res.status})`
+    try {
+      msg = (await res.json()).error ?? msg
+    } catch {}
+    throw new Error(msg)
+  }
+  return res.json()
+}
+
+const json = (method: string, body: unknown): RequestInit => ({ method, body: JSON.stringify(body) })
+const q = (path: string) => `?path=${encodeURIComponent(path)}`
+
+export const api = {
+  settings: () => request<PublicSettings>("/settings"),
+  saveProvider: (id: ProviderId, body: { apiKey?: string; baseUrl?: string }) =>
+    request<PublicSettings>(`/settings/providers/${id}`, json("PUT", body)),
+  setDefaultModel: (provider: ProviderId, model: string) =>
+    request<PublicSettings>("/settings/default-model", json("PUT", { provider, model })),
+  models: (id: ProviderId) => request<{ models: string[] }>(`/models/${id}`),
+
+  projects: () => request<Project[]>("/projects"),
+  project: (id: string) => request<Project>(`/projects/${id}`),
+  createProject: (name: string, description: string) =>
+    request<Project>("/projects", json("POST", { name, description })),
+  updateProject: (id: string, patch: { name?: string; description?: string }) =>
+    request<Project>(`/projects/${id}`, json("PATCH", patch)),
+  deleteProject: (id: string) => request(`/projects/${id}`, { method: "DELETE" }),
+
+  notes: (id: string) => request<NoteFile[]>(`/projects/${id}/notes`),
+  note: (id: string, path: string) => request<{ path: string; content: string }>(`/projects/${id}/note${q(path)}`),
+  saveNote: (id: string, path: string, content: string) =>
+    request(`/projects/${id}/note${q(path)}`, json("PUT", { content })),
+  createNote: (id: string, name: string, content?: string) =>
+    request<{ path: string }>(`/projects/${id}/notes`, json("POST", { name, content })),
+  renameNote: (id: string, path: string, name: string) =>
+    request<{ path: string }>(`/projects/${id}/note${q(path)}`, json("PATCH", { name })),
+  deleteNote: (id: string, path: string) => request(`/projects/${id}/note${q(path)}`, { method: "DELETE" }),
+
+  chats: (id: string) => request<ChatMeta[]>(`/projects/${id}/chats`),
+  chat: (id: string, chatId: string) => request<Chat>(`/projects/${id}/chats/${chatId}`),
+  deleteChat: (id: string, chatId: string) => request(`/projects/${id}/chats/${chatId}`, { method: "DELETE" }),
+}
+
+/** Send a chat turn and receive the reply as it streams in. */
+export async function streamChat(
+  projectId: string,
+  body: { chatId?: string; provider: ProviderId; model: string; messages: ChatMessage[]; openNotePath?: string },
+  onText: (text: string) => void,
+  signal?: AbortSignal,
+): Promise<{ chatId: string }> {
+  const res = await fetch(`/api/projects/${projectId}/chat`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+    signal,
+  })
+  if (!res.ok || !res.body) {
+    let msg = `Chat failed (${res.status})`
+    try {
+      msg = (await res.json()).error ?? msg
+    } catch {}
+    throw new Error(msg)
+  }
+  const chatId = res.headers.get("X-Chat-Id") ?? body.chatId ?? ""
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let text = ""
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    text += decoder.decode(value, { stream: true })
+    const err = text.indexOf("\u0000")
+    if (err >= 0) {
+      onText(text.slice(0, err))
+      throw new Error(text.slice(err + 1) || "The model stopped with an error")
+    }
+    onText(text)
+  }
+  return { chatId }
+}

@@ -148,6 +148,14 @@ export async function binaryFile(projectId: string, rel: string) {
   return fs.readFile(filePath(projectId, rel))
 }
 
+/** The folder of the LaTeX files and the SyncTeX file of the last build. */
+export function folder(projectId: string) {
+  return dir(projectId)
+}
+export function synctexPath(projectId: string) {
+  return path.join(dir(projectId), BUILD, MAIN.replace(/\.tex$/, ".synctex.gz"))
+}
+
 export function pdfPath(projectId: string) {
   return path.join(dir(projectId), BUILD, MAIN.replace(/\.tex$/, ".pdf"))
 }

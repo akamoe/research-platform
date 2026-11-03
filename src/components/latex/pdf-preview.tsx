@@ -21,11 +21,20 @@ interface View {
   zoom: number | null
 }
 
+/** Boxes to show on a page (from SyncTeX), in PDF points from the page's top-left. `at` makes each jump new. */
+export interface PdfMark {
+  page: number
+  boxes: { x: number; y: number; w: number; h: number }[]
+  at: number
+}
+/** A double-click (or Ctrl/⌘-click) on a page, in PDF points from its top-left. */
+export type PdfPick = (p: { page: number; x: number; y: number }) => void
+
 /**
  * The compiled PDF. Each new version loads underneath the current one and replaces it once it
  * is ready and scrolled to the same place, so recompiling doesn't flash or jump to page 1.
  */
-export function PdfPreview({ url, version }: { url: string; version: number }) {
+export function PdfPreview({ url, version, mark, onPick }: { url: string; version: number; mark?: PdfMark | null; onPick?: PdfPick }) {
   const { engine, isLoading, error } = usePdfiumEngine({ wasmUrl })
   const view = useRef<View>({ scrollTop: 0, scrollLeft: 0, zoom: null })
   const [shown, setShown] = useState(version)
@@ -47,6 +56,8 @@ export function PdfPreview({ url, version }: { url: string; version: number }) {
             active={v === shown}
             onReady={() => v === version && setShown(v)}
             onPages={setPages}
+            mark={mark ?? null}
+            onPick={onPick}
           />
         </div>
       ))}
@@ -67,6 +78,8 @@ function Instance({
   active,
   onReady,
   onPages,
+  mark,
+  onPick,
 }: {
   engine: NonNullable<ReturnType<typeof usePdfiumEngine>["engine"]>
   url: string
@@ -76,6 +89,8 @@ function Instance({
   active: boolean
   onReady: () => void
   onPages: (p: { current: number; total: number }) => void
+  mark: PdfMark | null
+  onPick?: PdfPick
 }) {
   const plugins = useMemo(
     () => [
@@ -94,7 +109,7 @@ function Instance({
           <DocumentContent documentId={activeDocumentId}>
             {({ isLoaded }) =>
               isLoaded ? (
-                <Pages docId={activeDocumentId} view={view} active={active} onReady={onReady} onPages={onPages} />
+                <Pages docId={activeDocumentId} view={view} active={active} onReady={onReady} onPages={onPages} mark={mark} onPick={onPick} />
               ) : (
                 <div className="h-full bg-muted" />
               )
@@ -112,12 +127,16 @@ function Pages({
   active,
   onReady,
   onPages,
+  mark,
+  onPick,
 }: {
   docId: string
   view: React.RefObject<View>
   active: boolean
   onReady: () => void
   onPages: (p: { current: number; total: number }) => void
+  mark: PdfMark | null
+  onPick?: PdfPick
 }) {
   const zoom = useZoom(docId)
   const scroll = useScroll(docId)
@@ -161,6 +180,24 @@ function Pages({
     if (active) onPages({ current: scroll.state.currentPage, total: scroll.state.totalPages })
   }, [active, scroll.state.currentPage, scroll.state.totalPages]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // A jump from the source: scroll to the boxes and show them for a moment.
+  const [flash, setFlash] = useState<PdfMark | null>(null)
+  useEffect(() => {
+    if (!active || !mark || !mark.boxes.length) return
+    const top = Math.min(...mark.boxes.map((b) => b.y))
+    const left = Math.min(...mark.boxes.map((b) => b.x))
+    scroll.provides?.scrollToPage({ pageNumber: mark.page, pageCoordinates: { x: Math.max(0, left - 40), y: Math.max(0, top - 120) }, behavior: "smooth" })
+    setFlash(mark)
+    const t = window.setTimeout(() => setFlash((f) => (f === mark ? null : f)), 2000)
+    return () => window.clearTimeout(t)
+  }, [mark?.at, active]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const pick = (e: React.MouseEvent<HTMLDivElement>, pageIndex: number) => {
+    if (!onPick) return
+    const r = e.currentTarget.getBoundingClientRect()
+    onPick({ page: pageIndex + 1, x: (e.clientX - r.left) / scale, y: (e.clientY - r.top) / scale })
+  }
+
   return (
     <div className="relative h-full">
       <div ref={wrap} className="absolute inset-0">
@@ -168,8 +205,26 @@ function Pages({
           <Scroller
             documentId={docId}
             renderPage={({ pageIndex, width, height }) => (
-              <div style={{ width, height }} className="bg-white shadow-sm">
+              <div
+                style={{ width, height }}
+                className="relative bg-white shadow-sm"
+                title={onPick ? "Double-click to find this in the source" : undefined}
+                onDoubleClick={(e) => {
+                  e.preventDefault()
+                  pick(e, pageIndex)
+                }}
+                onClick={(e) => (e.metaKey || e.ctrlKey) && pick(e, pageIndex)}
+              >
                 <RenderLayer documentId={docId} pageIndex={pageIndex} />
+                {flash?.page === pageIndex + 1 &&
+                  flash.boxes.map((b, i) => (
+                    <div
+                      key={`${flash.at}-${i}`}
+                      data-testid="synctex-mark"
+                      className="pointer-events-none absolute animate-pulse rounded-[2px] bg-primary/20 ring-1 ring-primary/40"
+                      style={{ left: (b.x - 2) * scale, top: (b.y - 1) * scale, width: (b.w + 4) * scale, height: (b.h + 2) * scale }}
+                    />
+                  ))}
               </div>
             )}
           />

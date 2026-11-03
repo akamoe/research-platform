@@ -553,6 +553,10 @@ export const api = {
   addSourceLink: (id: string, url: string) => request<Source>(`/projects/${id}/sources/link`, json("POST", { url })),
   addSourceText: (id: string, title: string, text: string) =>
     request<Source>(`/projects/${id}/sources/text`, json("POST", { title, text })),
+  synctexView: (id: string, file: string, line: number) =>
+    request<{ page: number; boxes: { x: number; y: number; w: number; h: number }[] } | null>(`/projects/${id}/latex/synctex/view`, json("POST", { file, line })),
+  synctexEdit: (id: string, page: number, x: number, y: number) =>
+    request<{ file: string; line: number } | null>(`/projects/${id}/latex/synctex/edit`, json("POST", { page, x, y })),
   ocr: (id: string, sid: string) => request<OcrInfo>(`/projects/${id}/sources/${sid}/ocr`),
   startOcr: (id: string, sid: string, langs: string[]) => request<OcrJob>(`/projects/${id}/sources/${sid}/ocr`, json("POST", { langs })),
   sourceText: (id: string, sid: string) => request<{ text: string }>(`/projects/${id}/sources/${sid}/text`),

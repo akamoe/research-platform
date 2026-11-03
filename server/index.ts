@@ -33,6 +33,7 @@ import * as flashcards from "./flashcards.ts"
 import * as reading from "./reading.ts"
 import * as figures from "./figures.ts"
 import * as ocr from "./ocr.ts"
+import * as synctex from "./synctex.ts"
 import * as exporter from "./export.ts"
 import * as supervisor from "./supervisor.ts"
 import { backgroundModel } from "./ai.ts"
@@ -428,6 +429,15 @@ api.post("/projects/:id/latex/template", async (c) => {
   return c.json(await latex.applyTemplate(c.req.param("id"), body.id))
 })
 api.post("/projects/:id/latex/compile", async (c) => c.json(await latex.compile(c.req.param("id"))))
+// SyncTeX: from a line of a .tex file to the PDF, and back.
+api.post("/projects/:id/latex/synctex/view", async (c) => {
+  const b = z.object({ file: z.string().max(600), line: z.number().int().min(1) }).parse(await c.req.json())
+  return c.json(await synctex.view(c.req.param("id"), b.file, b.line))
+})
+api.post("/projects/:id/latex/synctex/edit", async (c) => {
+  const b = z.object({ page: z.number().int().min(1), x: z.number(), y: z.number() }).parse(await c.req.json())
+  return c.json(await synctex.edit(c.req.param("id"), b.page, b.x, b.y))
+})
 api.get("/projects/:id/latex/pdf", async (c) => {
   const id = c.req.param("id")
   const project = await projects.getProject(id)

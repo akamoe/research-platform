@@ -20,6 +20,7 @@ import {
   HistoryIcon,
   Trash2Icon,
   UploadIcon,
+  LocateFixedIcon,
 } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -43,7 +44,7 @@ import { api, type LatexFile, type LatexProblem, type LatexResult, type LatexSta
 import { navigate } from "@/lib/router"
 import { cn } from "@/lib/utils"
 import { LatexEditor, usesNatbib, type EditorContext, type LatexEditorHandle } from "./latex-editor"
-import { PdfPreview } from "./pdf-preview"
+import { PdfPreview, type PdfMark, type PdfPick } from "./pdf-preview"
 import { FeedbackPanel, type FeedbackTarget } from "@/components/feedback/feedback-panel"
 import { NoteHistory } from "@/components/editor/note-history"
 
@@ -213,6 +214,35 @@ export function LatexView({
   const warnings = problems.length - errors
   const file = state?.files.find((f) => f.path === path)
 
+  // SyncTeX: from the cursor's line to the PDF, and from a double-click in the PDF to the source.
+  const [mark, setMark] = useState<PdfMark | null>(null)
+  const showInPdf = async (line?: number) => {
+    if (!path.endsWith(".tex")) return
+    try {
+      const r = await api.synctexView(projectId, path, line ?? editor.current?.line() ?? 1)
+      if (r?.boxes.length) setMark({ ...r, at: Date.now() })
+      else toast("That part isn't in the PDF yet. Compile, then try again.")
+    } catch (e) {
+      toast.error((e as Error).message)
+    }
+  }
+  const fromPdf: PdfPick = async ({ page, x, y }) => {
+    try {
+      const r = await api.synctexEdit(projectId, page, x, y)
+      if (!r) return
+      const go = () => {
+        editor.current?.goto(r.line)
+        editor.current?.flash(r.line)
+      }
+      if (r.file !== path && state?.files.some((f) => f.path === r.file)) {
+        await open(r.file)
+        window.setTimeout(go, 250)
+      } else if (r.file === path) go()
+    } catch (e) {
+      toast.error((e as Error).message)
+    }
+  }
+
   const goto = async (p: LatexProblem) => {
     const target = p.file ?? state?.main ?? "main.tex"
     if (target !== path && state?.files.some((f) => f.path === target)) {
@@ -328,6 +358,21 @@ export function LatexView({
                 variant="ghost"
                 size="icon"
                 className="size-8 text-muted-foreground"
+                onClick={() => void showInPdf()}
+                disabled={!path.endsWith(".tex") || !pdfVersion}
+                aria-label="Show in PDF"
+              >
+                <LocateFixedIcon className="size-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Show this line in the PDF ({isMac ? "⌘" : "Ctrl"}-click a line). Double-click the PDF to go back.</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-8 text-muted-foreground"
                 onClick={() => setHistoryOpen(true)}
                 disabled={!!file?.library || !file?.text}
                 aria-label="History"
@@ -393,6 +438,7 @@ export function LatexView({
                     context={context}
                     onChange={onChange}
                     onRun={compile}
+                    onShowInPdf={(line) => void showInPdf(line)}
                   />
                 )}
               </div>
@@ -406,6 +452,8 @@ export function LatexView({
               state={state}
               compiling={compiling}
               version={pdfVersion}
+              mark={mark}
+              onPick={fromPdf}
               failed={!!result && !result.pdf}
               onInstall={async () => {
                 try {
@@ -502,6 +550,8 @@ function Preview({
   state,
   compiling,
   version,
+  mark,
+  onPick,
   failed,
   onInstall,
 }: {
@@ -509,6 +559,8 @@ function Preview({
   state: LatexState | null
   compiling: boolean
   version: number | null
+  mark: PdfMark | null
+  onPick: PdfPick
   failed: boolean
   onInstall: () => void
 }) {
@@ -554,7 +606,7 @@ function Preview({
   if (version)
     return (
       <div className="relative h-full">
-        <PdfPreview url={`/api/projects/${projectId}/latex/pdf`} version={version} />
+        <PdfPreview url={`/api/projects/${projectId}/latex/pdf`} version={version} mark={mark} onPick={onPick} />
         {compiling && (
           <LoaderCircleIcon className="absolute top-3 right-3 size-4 animate-spin text-muted-foreground" aria-label="Compiling" />
         )}

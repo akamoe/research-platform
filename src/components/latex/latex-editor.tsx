@@ -1,8 +1,10 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react"
-import { EditorState, type Extension } from "@codemirror/state"
+import { EditorState, StateEffect, StateField, type Extension } from "@codemirror/state"
 import {
+  Decoration,
   EditorView,
   drawSelection,
+  type DecorationSet,
   highlightActiveLine,
   highlightActiveLineGutter,
   keymap,
@@ -48,6 +50,10 @@ export interface LatexEditorHandle {
   select: (from: number, to: number) => void
   insert: (text: string) => void
   focus: () => void
+  /** The line the cursor is on. */
+  line: () => number
+  /** Mark a line for a moment (after jumping to it from the PDF). */
+  flash: (line: number) => void
 }
 
 interface Props {
@@ -59,7 +65,21 @@ interface Props {
   context: React.RefObject<EditorContext>
   onChange: (text: string) => void
   onRun: () => void
+  /** Ctrl/⌘-click on a line: show where it is in the PDF. */
+  onShowInPdf?: (line: number) => void
 }
+
+// A line marked for a moment after a jump from the PDF.
+const setFlash = StateEffect.define<number | null>()
+const flashLine = Decoration.line({ class: "cm-flash" })
+const flashField = StateField.define<DecorationSet>({
+  create: () => Decoration.none,
+  update(deco, tr) {
+    for (const e of tr.effects) if (e.is(setFlash)) return e.value === null ? Decoration.none : Decoration.set([flashLine.range(e.value)])
+    return deco.map(tr.changes)
+  },
+  provide: (f) => EditorView.decorations.from(f),
+})
 
 const theme = EditorView.theme({
   "&": { height: "100%", fontSize: "13.5px", backgroundColor: "var(--background)", color: "var(--foreground)" },
@@ -72,6 +92,7 @@ const theme = EditorView.theme({
     border: "none",
   },
   ".cm-lineNumbers .cm-gutterElement": { padding: "0 4px 0 14px", fontSize: "12px" },
+  ".cm-flash": { backgroundColor: "color-mix(in oklab, var(--primary) 18%, transparent)", transition: "background-color .3s" },
   ".cm-activeLine": { backgroundColor: "color-mix(in oklab, var(--muted) 55%, transparent)" },
   ".cm-activeLineGutter": { backgroundColor: "transparent", color: "var(--foreground)" },
   "&.cm-focused": { outline: "none" },
@@ -226,14 +247,14 @@ function diagnostics(view: EditorView, problems: LatexProblem[]): Diagnostic[] {
 }
 
 export const LatexEditor = forwardRef<LatexEditorHandle, Props>(function LatexEditor(
-  { docKey, initial, readOnly, problems, context, onChange, onRun },
+  { docKey, initial, readOnly, problems, context, onChange, onRun, onShowInPdf },
   ref,
 ) {
   const host = useRef<HTMLDivElement>(null)
   const view = useRef<EditorView | null>(null)
   // Callbacks change every render; the editor reads the latest ones.
-  const latest = useRef({ onChange, onRun })
-  latest.current = { onChange, onRun }
+  const latest = useRef({ onChange, onRun, onShowInPdf })
+  latest.current = { onChange, onRun, onShowInPdf }
 
   useEffect(() => {
     const extensions: Extension[] = [
@@ -265,6 +286,18 @@ export const LatexEditor = forwardRef<LatexEditorHandle, Props>(function LatexEd
         ...completionKeymap,
         indentWithTab,
       ]),
+      EditorView.domEventHandlers({
+        mousedown(e, v) {
+          if (!(e.metaKey || e.ctrlKey) || e.button !== 0 || !latest.current.onShowInPdf) return false
+          const pos = v.posAtCoords({ x: e.clientX, y: e.clientY })
+          if (pos === null) return false
+          e.preventDefault()
+          v.dispatch({ selection: { anchor: pos } })
+          latest.current.onShowInPdf(v.state.doc.lineAt(pos).number)
+          return true
+        },
+      }),
+      flashField,
       EditorState.readOnly.of(!!readOnly),
       EditorView.updateListener.of((u) => {
         if (u.docChanged) latest.current.onChange(u.state.doc.toString())
@@ -316,6 +349,17 @@ export const LatexEditor = forwardRef<LatexEditorHandle, Props>(function LatexEd
       v.focus()
     },
     focus: () => view.current?.focus(),
+    line: () => {
+      const v = view.current
+      return v ? v.state.doc.lineAt(v.state.selection.main.head).number : 1
+    },
+    flash(lineNo) {
+      const v = view.current
+      if (!v) return
+      const line = v.state.doc.line(Math.min(Math.max(1, lineNo), v.state.doc.lines))
+      v.dispatch({ effects: setFlash.of(line.from) })
+      window.setTimeout(() => view.current?.dispatch({ effects: setFlash.of(null) }), 1500)
+    },
   }))
 
   return <div ref={host} className="h-full min-h-0 overflow-hidden [&_.cm-editor]:h-full" />

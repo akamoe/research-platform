@@ -51,7 +51,7 @@ const firstWords = (s: string, n = 8) => s.split(/\s+/).slice(0, n).join(" ")
 const looksEnglish = (t: string) => (t.match(/[a-z]/gi)?.length ?? 0) > 0.6 * (t.match(/\p{L}/gu)?.length ?? 1)
 
 const CLAIM = /\b(stud(y|ies)|research|evidence|literature|scholars|researchers|experts|surveys?|data)\s+(has\s+|have\s+)?(shows?|showed|shown|suggests?|suggested|indicates?|indicated|finds?|found|demonstrates?|demonstrated|confirms?|confirmed|reveals?|revealed)\b|\b(it is|it's|has been|have been) (well[- ])?(known|established|shown|demonstrated|documented)\b|\baccording to\b|\b\d+(\.\d+)?\s?(%|percent)\b|\bmost (people|students|researchers|studies)\b/i
-const CITED = /\[@|(^|\s)@[\w:.-]|\\cite|\(\s*[A-Z][\p{L}'-]+(,| et al\.?| and )[^)]*\d{4}[a-z]?\s*\)/u
+export const CITED = /\[@|(^|\s)@[\w:.-]|\\cite|\(\s*[A-Z][\p{L}'-]+(,| et al\.?| and )[^)]*\d{4}[a-z]?\s*\)/u
 const VAGUE = /\b(obviously|clearly|of course|very|really|basically|actually|quite|a lot of|lots of|things?|stuff|huge|massive|always|never|everyone|nobody|proves?)\b/gi
 const VAGUE_NOTE: Record<string, string> = {
   obviously: "tells the reader what to think. Does the evidence show it on its own?",

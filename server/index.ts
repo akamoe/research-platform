@@ -26,6 +26,7 @@ import * as links from "./links.ts"
 import * as history from "./history.ts"
 import * as matrix from "./matrix.ts"
 import * as feedback from "./feedback.ts"
+import * as similarity from "./similarity.ts"
 import * as exporter from "./export.ts"
 import * as supervisor from "./supervisor.ts"
 import { backgroundModel } from "./ai.ts"
@@ -540,6 +541,17 @@ api.post("/projects/:id/feedback", async (c) => {
   const issues = feedback.rules(text)
   if (body.ai) issues.unshift(...(await feedback.aiReview(text)))
   return c.json({ issues })
+})
+
+// ---------- similarity self-check against the project's own sources ----------
+api.post("/projects/:id/similarity", async (c) => {
+  const id = c.req.param("id")
+  const body = z.object({ notePath: z.string().max(600).optional(), latexPath: z.string().max(600).optional() }).parse(await c.req.json())
+  let text: string
+  if (body.latexPath) text = feedback.readableLatex(similarity.latexQuotes(await latex.readFile(id, body.latexPath)))
+  else if (body.notePath) text = feedback.readableMarkdown(similarity.quoteBlockquotes(await projects.readNote(id, body.notePath)))
+  else throw new HttpError(400, "Nothing to check")
+  return c.json(await similarity.check(id, text))
 })
 
 // ---------- literature review matrix ----------

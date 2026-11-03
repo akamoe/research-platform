@@ -211,6 +211,25 @@ export interface ExportStatus {
   pdf: boolean
 }
 export type FeedbackKind = "clarity" | "structure" | "citation" | "grammar" | "style"
+export type SimilarityKind = "copied" | "close" | "quoted"
+export interface SimilarityMatch {
+  id: string
+  kind: SimilarityKind
+  quote: string
+  words: number
+  sourceId: string
+  sourceTitle: string
+  page?: number
+  excerpt: string
+  cited: boolean
+}
+export interface SimilarityReport {
+  words: number
+  flaggedWords: number
+  matches: SimilarityMatch[]
+  bySource: { sourceId: string; title: string; words: number }[]
+  unreadable: string[]
+}
 export interface FeedbackIssue {
   id: string
   kind: FeedbackKind
@@ -528,6 +547,8 @@ export const api = {
   exportUrl: (id: string, file: string) => `/api/projects/${id}/exports/${encodeURIComponent(file)}`,
   feedback: (id: string, target: { notePath?: string; latexPath?: string }, ai: boolean) =>
     request<{ issues: FeedbackIssue[] }>(`/projects/${id}/feedback`, json("POST", { ...target, ai })),
+  similarity: (id: string, target: { notePath?: string; latexPath?: string }) =>
+    request<SimilarityReport>(`/projects/${id}/similarity`, json("POST", target)),
   matrix: (id: string) => request<Matrix>(`/projects/${id}/matrix`),
   saveMatrix: (id: string, m: Matrix) => request<Matrix>(`/projects/${id}/matrix`, json("PUT", m)),
   fillMatrix: (id: string, sourceId: string, columns?: string[], overwrite?: boolean) =>

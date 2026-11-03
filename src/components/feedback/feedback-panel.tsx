@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { LoaderCircleIcon, RefreshCwIcon, SparklesIcon, XIcon } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+import { SimilarityCheck } from "./similarity-check"
 import { api, type FeedbackIssue, type FeedbackKind } from "@/lib/api"
 import { cn } from "@/lib/utils"
 
@@ -113,7 +115,7 @@ export function domTarget(getRoot: () => HTMLElement | null): FeedbackTarget {
   }
 }
 
-interface Props {
+export interface CheckProps {
   projectId: string
   /** What to check: a note or a LaTeX file. */
   file: { notePath?: string; latexPath?: string }
@@ -123,7 +125,41 @@ interface Props {
   onClose: () => void
 }
 
-export function FeedbackPanel({ projectId, file, target, beforeCheck, onClose }: Props) {
+/** The side panel: writing feedback, and the check against the student's own sources. */
+export function FeedbackPanel({ onClose, ...props }: CheckProps) {
+  const [tab, setTab] = useState<"writing" | "sources">(() => (localStorage.getItem(TAB_KEY) === "sources" ? "sources" : "writing"))
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex h-10 shrink-0 items-center gap-2 border-b px-2">
+        <ToggleGroup
+          type="single"
+          size="sm"
+          value={tab}
+          onValueChange={(v) => {
+            if (!v) return
+            setTab(v as typeof tab)
+            localStorage.setItem(TAB_KEY, v)
+          }}
+          aria-label="Check"
+        >
+          <ToggleGroupItem value="writing" className="h-7 px-2.5 text-sm">
+            Writing
+          </ToggleGroupItem>
+          <ToggleGroupItem value="sources" className="h-7 px-2.5 text-sm">
+            Sources
+          </ToggleGroupItem>
+        </ToggleGroup>
+        <Button variant="ghost" size="icon" className="ml-auto size-8 text-muted-foreground" onClick={onClose} aria-label="Close feedback">
+          <XIcon className="size-4" />
+        </Button>
+      </div>
+      {tab === "writing" ? <WritingFeedback {...props} /> : <SimilarityCheck {...props} />}
+    </div>
+  )
+}
+const TAB_KEY = "rp-feedback-tab"
+
+function WritingFeedback({ projectId, file, target, beforeCheck }: Omit<CheckProps, "onClose">) {
   const [issues, setIssues] = useState<FeedbackIssue[] | null>(null)
   const [loading, setLoading] = useState<"rules" | "ai" | null>(null)
   const [filter, setFilter] = useState<FeedbackKind | null>(null)
@@ -173,13 +209,7 @@ export function FeedbackPanel({ projectId, file, target, beforeCheck, onClose }:
   const counts = Object.fromEntries(KINDS.map((k) => [k.id, (issues ?? []).filter((i) => i.kind === k.id && !dismissed.has(i.id)).length]))
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div className="flex h-10 shrink-0 items-center gap-2 border-b px-3">
-        <span className="text-sm font-medium">Feedback</span>
-        <Button variant="ghost" size="icon" className="ml-auto size-8 text-muted-foreground" onClick={onClose} aria-label="Close feedback">
-          <XIcon className="size-4" />
-        </Button>
-      </div>
+    <>
       <div className="space-y-3 border-b p-3">
         <div className="flex gap-2">
           <Button size="sm" className="h-8 flex-1" disabled={!!loading} onClick={() => check(true)}>
@@ -258,6 +288,6 @@ export function FeedbackPanel({ projectId, file, target, beforeCheck, onClose }:
         )}
       </div>
       <p className="border-t px-3 py-2 text-xs text-muted-foreground">Feedback points at problems and asks questions. It never rewrites your text.</p>
-    </div>
+    </>
   )
 }

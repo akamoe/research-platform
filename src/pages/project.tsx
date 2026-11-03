@@ -53,6 +53,7 @@ import { LatexView } from "@/components/latex/latex-view"
 import { NoteEditor, SourceEditor } from "@/components/editor/note-editor"
 import { Backlinks } from "@/components/editor/backlinks"
 import { NoteHistory } from "@/components/editor/note-history"
+import { Outline } from "@/components/editor/outline"
 import type { NoteLinks } from "@/components/editor/note-links"
 import { resolveLink } from "@/lib/wikilinks"
 import { ProjectDialog } from "@/components/project-dialog"
@@ -547,6 +548,8 @@ function NotePane({
 }) {
   const { content, status, save: saveNote, sync, rename: renameFile, whenSaved, replace } = useNote(projectId, path)
   const [historyOpen, setHistoryOpen] = useState(false)
+  // The latest text, for the outline (content only changes when a note loads).
+  const [outlineMd, setOutlineMd] = useState<string | null>(null)
   // Bumped to load restored text into a fresh editor.
   const [rev, setRev] = useState(0)
   const [source, setSource] = useState(false)
@@ -582,6 +585,7 @@ function NotePane({
 
   const save = (md: string) => {
     saveNote(md)
+    setOutlineMd(md)
     const heading = headingOf(md)
     const name = baseName(pathRef.current)
     if (!follows.current || !heading || heading === name || heading === name.replace(/ \d+$/, "")) {
@@ -730,7 +734,8 @@ function NotePane({
           <TooltipContent>Chat (Ctrl/⌘ J)</TooltipContent>
         </Tooltip>
       </div>
-      <div className="flex min-h-0 flex-1">
+      <div className="relative flex min-h-0 flex-1">
+        {content !== null && !source && !feedback && <Outline markdown={outlineMd ?? content} scroller={editorBox} />}
         <div ref={editorBox} className="min-h-0 flex-1 overflow-y-auto">
           <div className="mx-auto max-w-[720px] px-8 pt-6 sm:px-12">
             {content !== null &&

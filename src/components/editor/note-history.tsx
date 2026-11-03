@@ -7,13 +7,16 @@ import { cn } from "@/lib/utils"
 
 type Version = { id: string; at: string; words: number }
 
-const when = (iso: string) => {
+const day = (iso: string) => {
   const d = new Date(iso)
-  const today = new Date().toDateString() === d.toDateString()
-  return today
-    ? `Today, ${d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}`
-    : d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
+  const now = new Date()
+  if (d.toDateString() === now.toDateString()) return "Today"
+  const y = new Date(now)
+  y.setDate(now.getDate() - 1)
+  if (d.toDateString() === y.toDateString()) return "Yesterday"
+  return d.toLocaleDateString(undefined, { month: "long", day: "numeric" })
 }
+const time = (iso: string) => new Date(iso).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })
 
 /** Earlier versions of a note, kept as you write. Pick one to read it, then restore it if you want it back. */
 export function NoteHistory({
@@ -84,17 +87,18 @@ export function NoteHistory({
         <div className="flex min-h-0 flex-1">
           <ul className="w-48 shrink-0 space-y-0.5 overflow-y-auto border-r p-2">
             {versions?.length === 0 && <li className="p-2 text-sm text-muted-foreground">No earlier versions yet.</li>}
-            {versions?.map((v) => (
+            {versions?.map((v, i) => (
               <li key={v.id}>
+                {(i === 0 || day(versions[i - 1].at) !== day(v.at)) && (
+                  <div className="px-2 pt-2 pb-1 text-xs font-medium text-muted-foreground">{day(v.at)}</div>
+                )}
                 <button
                   type="button"
                   onClick={() => setPicked(v.id)}
                   className={cn("w-full rounded-md px-2 py-1.5 text-left hover:bg-muted", picked === v.id && "bg-muted")}
                 >
-                  <div className="text-sm">{when(v.at)}</div>
-                  <div className="text-xs text-muted-foreground">
-                    {v.words} words
-                  </div>
+                  <div className="text-sm">{time(v.at)}</div>
+                  <div className="text-xs text-muted-foreground">{v.words} words</div>
                 </button>
               </li>
             ))}

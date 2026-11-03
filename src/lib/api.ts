@@ -97,6 +97,24 @@ export interface Highlight {
   image?: string
   createdAt: string
 }
+export type FlashRating = "again" | "hard" | "good" | "easy"
+export interface Flashcard {
+  id: string
+  front: string
+  back: string
+  sourceId?: string
+  highlightId?: string
+  page?: number
+  by: "student" | "ai"
+  createdAt: string
+  due: string
+  interval: number
+  reps: number
+  lapses: number
+  suspended?: boolean
+  /** Days until the next review for each answer. */
+  next: Record<FlashRating, number>
+}
 export interface ChatMeta {
   id: string
   title: string
@@ -584,6 +602,16 @@ export const api = {
     request<{ issues: FeedbackIssue[] }>(`/projects/${id}/feedback`, json("POST", { ...target, ai })),
   similarity: (id: string, target: { notePath?: string; latexPath?: string }) =>
     request<SimilarityReport>(`/projects/${id}/similarity`, json("POST", target)),
+  flashcards: (id: string) => request<Flashcard[]>(`/projects/${id}/flashcards`),
+  createFlashcard: (id: string, card: { front: string; back: string; sourceId?: string; highlightId?: string; page?: number }) =>
+    request<Flashcard>(`/projects/${id}/flashcards`, json("POST", card)),
+  generateFlashcards: (id: string, sourceId: string) =>
+    request<{ added: Flashcard[]; skipped: number }>(`/projects/${id}/flashcards/generate`, json("POST", { sourceId })),
+  updateFlashcard: (id: string, cid: string, patch: { front?: string; back?: string; suspended?: boolean }) =>
+    request<Flashcard>(`/projects/${id}/flashcards/${cid}`, json("PATCH", patch)),
+  deleteFlashcard: (id: string, cid: string) => request(`/projects/${id}/flashcards/${cid}`, { method: "DELETE" }),
+  reviewFlashcard: (id: string, cid: string, rating: FlashRating) =>
+    request<Flashcard>(`/projects/${id}/flashcards/${cid}/review`, json("POST", { rating })),
   matrix: (id: string) => request<Matrix>(`/projects/${id}/matrix`),
   saveMatrix: (id: string, m: Matrix) => request<Matrix>(`/projects/${id}/matrix`, json("PUT", m)),
   fillMatrix: (id: string, sourceId: string, columns?: string[], overwrite?: boolean) =>

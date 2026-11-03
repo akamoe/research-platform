@@ -10,6 +10,7 @@ import {
   TableIcon,
   MessageSquareQuoteIcon,
   ArchiveIcon,
+  GalleryVerticalEndIcon,
   SpellCheckIcon,
   DownloadIcon,
   WaypointsIcon,
@@ -69,6 +70,7 @@ import { FeedbackPanel, domTarget } from "@/components/feedback/feedback-panel"
 import { ExportDialog } from "@/components/export/export-dialog"
 import { MatrixView } from "@/components/matrix/matrix-view"
 import { SupervisorView } from "@/components/supervisor/supervisor-view"
+import { FlashcardsView } from "@/components/flashcards/flashcards-view"
 import { SearchDialog } from "@/components/search/search-dialog"
 import { LibrarySections } from "@/components/sidebar/library"
 import { AddSourceDialog } from "@/components/papers/add-source-dialog"
@@ -339,6 +341,14 @@ export function ProjectPage({ projectId, notePath, paperId, view, kbPage, settin
                 </SidebarMenuItem>
                 <SidebarMenuItem>
                   <SidebarMenuButton
+                    isActive={view === "flashcards"}
+                    onClick={() => navigate({ name: "project", projectId, view: "flashcards" })}
+                  >
+                    <GalleryVerticalEndIcon /> Flashcards
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
                     isActive={view === "supervisor"}
                     onClick={() => navigate({ name: "project", projectId, view: "supervisor" })}
                   >
@@ -385,6 +395,8 @@ export function ProjectPage({ projectId, notePath, paperId, view, kbPage, settin
           <div className="flex min-w-0 flex-1 flex-col">
             {view === "canvas" ? (
               <CanvasView projectId={projectId} chatOpen={chatOpen} onToggleChat={() => setChatOpen((o) => !o)} />
+            ) : view === "flashcards" ? (
+              <FlashcardsView projectId={projectId} papers={papers} chatOpen={chatOpen} onToggleChat={() => setChatOpen((o) => !o)} />
             ) : view === "supervisor" ? (
               <SupervisorView projectId={projectId} chatOpen={chatOpen} onToggleChat={() => setChatOpen((o) => !o)} />
             ) : view === "matrix" ? (

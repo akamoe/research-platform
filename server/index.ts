@@ -29,6 +29,7 @@ import * as matrix from "./matrix.ts"
 import * as feedback from "./feedback.ts"
 import * as similarity from "./similarity.ts"
 import * as backup from "./backup.ts"
+import * as flashcards from "./flashcards.ts"
 import * as exporter from "./export.ts"
 import * as supervisor from "./supervisor.ts"
 import { backgroundModel } from "./ai.ts"
@@ -500,6 +501,34 @@ api.get("/projects/:id/supervisor/:rid/file", async (c) => {
     "Content-Type": r.kind === "pdf" ? "application/pdf" : "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     "Content-Disposition": `${r.kind === "pdf" ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(r.fileName)}`,
   })
+})
+
+// ---------- flashcards from highlights ----------
+api.get("/projects/:id/flashcards", async (c) => {
+  const cards = await flashcards.list(c.req.param("id"))
+  return c.json(cards.map((card) => ({ ...card, next: flashcards.preview(card) })))
+})
+api.post("/projects/:id/flashcards", async (c) =>
+  c.json(await flashcards.create(c.req.param("id"), flashcards.CardInput.parse(await c.req.json())), 201),
+)
+api.post("/projects/:id/flashcards/generate", async (c) => {
+  const body = z.object({ sourceId: z.string().regex(/^[\w-]+$/) }).parse(await c.req.json())
+  return c.json(await flashcards.generate(c.req.param("id"), body.sourceId))
+})
+api.patch("/projects/:id/flashcards/:cid", async (c) => {
+  const body = z
+    .object({ front: z.string().trim().min(1).max(2000).optional(), back: z.string().trim().min(1).max(4000).optional(), suspended: z.boolean().optional() })
+    .parse(await c.req.json())
+  return c.json(await flashcards.update(c.req.param("id"), c.req.param("cid"), body))
+})
+api.delete("/projects/:id/flashcards/:cid", async (c) => {
+  await flashcards.remove(c.req.param("id"), c.req.param("cid"))
+  return c.json({ ok: true })
+})
+api.post("/projects/:id/flashcards/:cid/review", async (c) => {
+  const body = z.object({ rating: z.enum(["again", "hard", "good", "easy"]) }).parse(await c.req.json())
+  const card = await flashcards.review(c.req.param("id"), c.req.param("cid"), body.rating)
+  return c.json({ ...card, next: flashcards.preview(card) })
 })
 
 // ---------- backups ----------

@@ -768,24 +768,28 @@ function TemplateDialog({
 }) {
   const [list, setList] = useState<LatexTemplate[] | null>(null)
   const [chosen, setChosen] = useState<LatexTemplate | null>(null)
+  /** The row under the pointer or keyboard; the preview follows it. */
+  const [active, setActive] = useState("")
   const [busy, setBusy] = useState(false)
   useEffect(() => {
     if (open && !list) api.latexTemplates().then(setList, (e) => toast.error(e.message))
     if (!open) setChosen(null)
   }, [open, list])
   const fields = [...new Set((list ?? []).map((t) => t.field))]
+  const shown = list?.find((t) => t.id === active.split(" ")[0]) ?? chosen ?? list?.[0]
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="gap-0 p-0 sm:max-w-xl">
+      <DialogContent className="gap-0 p-0 sm:max-w-3xl">
         <DialogHeader className="p-4 pb-3">
           <DialogTitle>Journal templates</DialogTitle>
           <DialogDescription>
             Each one sets up main.tex the way the journal asks for. Your current main.tex is kept as a separate file.
           </DialogDescription>
         </DialogHeader>
-        <Command className="border-t">
+        <div className="flex min-h-0 border-t">
+        <Command className="min-w-0 flex-1 rounded-none" value={active} onValueChange={setActive}>
           <CommandInput placeholder="Search journals, publishers or fields" />
-          <CommandList className="max-h-[50vh]">
+          <CommandList className="h-[55vh] max-h-none">
             <CommandEmpty>{list ? "No template matches. You can upload a journal's own .cls file from the Files menu." : "Loading…"}</CommandEmpty>
             {fields.map((field) => (
               <CommandGroup key={field} heading={field}>
@@ -794,7 +798,7 @@ function TemplateDialog({
                   .map((t) => (
                     <CommandItem
                       key={t.id}
-                      value={`${t.name} ${t.publisher} ${t.examples} ${t.cls} ${t.field}`}
+                      value={`${t.id} ${t.name} ${t.publisher} ${t.examples} ${t.cls} ${t.field}`}
                       onSelect={() => setChosen(t)}
                       onDoubleClick={() => void apply(t)}
                       className="items-start"
@@ -812,6 +816,18 @@ function TemplateDialog({
             ))}
           </CommandList>
         </Command>
+          {shown && (
+            <div className="hidden w-64 shrink-0 flex-col gap-2 border-l bg-muted/40 p-4 sm:flex">
+              <img
+                key={shown.id}
+                src={`/latex-templates/${shown.id}.png`}
+                alt={`First page of a paper in the ${shown.name} template`}
+                className="w-full rounded-sm border bg-white shadow-sm"
+              />
+              <p className="text-xs text-muted-foreground">First page, with sample text.</p>
+            </div>
+          )}
+        </div>
         <DialogFooter className="items-center border-t p-3 sm:justify-between">
           <p className="text-xs text-muted-foreground">
             {chosen ? <>Uses the <span className="font-mono">{chosen.cls}</span> class, included with LaTeX.</> : "Journal not here? Upload its .cls file from the Files menu."}

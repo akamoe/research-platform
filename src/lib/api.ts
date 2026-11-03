@@ -379,6 +379,8 @@ export const api = {
   renameNote: (id: string, path: string, name: string, unique?: boolean) =>
     request<{ path: string }>(`/projects/${id}/note${q(path)}`, json("PATCH", { name, unique })),
   deleteNote: (id: string, path: string) => request(`/projects/${id}/note${q(path)}`, { method: "DELETE" }),
+  backlinks: (id: string, path: string) =>
+    request<{ path: string; name: string; excerpt: string }[]>(`/projects/${id}/note/backlinks${q(path)}`),
 
   chats: (id: string, sourceId?: string) =>
     request<ChatMeta[]>(`/projects/${id}/chats${sourceId ? `?source=${sourceId}` : ""}`),

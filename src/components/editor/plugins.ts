@@ -37,6 +37,7 @@ import { MarkdownPlugin, type MdNodeParser } from "@platejs/markdown"
 import { ImagePlugin } from "@platejs/media/react"
 import remarkGfm from "remark-gfm"
 import * as N from "./nodes"
+import { WikiLinkPlugin } from "./note-links"
 
 const headingOpts = { inputRules: [HeadingRules.markdown()], rules: { break: { empty: "reset" as const } } }
 const blockTargets = [...KEYS.heading, KEYS.p, KEYS.blockquote, KEYS.codeBlock]
@@ -77,9 +78,12 @@ const imageRule: MdNodeParser<"img"> = {
 
 /**
  * The markdown writer escapes "[" so "[@key]" would be saved as "\\[@key]", which pandoc and
- * other citation tools read as plain text. Keep citations unescaped on disk.
+ * other citation tools read as plain text. Keep citations and `[[note links]]` unescaped on disk.
  */
-export const unescapeCitations = (md: string) => md.replace(/\\\[(?=[^\]\n]*@[\w:.-]+[^\]\n]*\])/g, "[")
+export const unescapeCitations = (md: string) =>
+  md
+    .replace(/\\\[(?=[^\]\n]*@[\w:.-]+[^\]\n]*\])/g, "[")
+    .replace(/\\\[\\\[(?=[^[\]\n]+\]\])/g, "[[")
 
 /** Shows pandoc-style citations ([@key], [@a; @b, p. 4]) as small chips. Decoration only: the markdown is unchanged. */
 export const CITATION_RE = /\[[^\]\n]*@[\w:.-]+[^\]\n]*\]/g
@@ -189,4 +193,5 @@ export const editorPlugins = [
   }),
   HighlightPastePlugin,
   CitationPlugin,
+  WikiLinkPlugin,
 ]

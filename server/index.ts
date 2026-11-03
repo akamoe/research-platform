@@ -22,6 +22,7 @@ import * as latex from "./latex.ts"
 import * as organize from "./organize.ts"
 import * as discover from "./discover.ts"
 import * as thesis from "./thesis.ts"
+import * as links from "./links.ts"
 import * as matrix from "./matrix.ts"
 import * as feedback from "./feedback.ts"
 import { backgroundModel } from "./ai.ts"
@@ -126,9 +127,11 @@ api.patch("/projects/:id/note", async (c) => {
   if (to !== from) {
     await organize.renameKey(c.req.param("id"), `n:${from}`, `n:${to}`).catch(() => {})
     await thesis.renameNote(c.req.param("id"), from, to).catch(() => {})
+    await links.renameLinks(c.req.param("id"), from, to).catch(() => {})
   }
   return c.json({ path: to })
 })
+api.get("/projects/:id/note/backlinks", async (c) => c.json(await links.backlinks(c.req.param("id"), notePathParam(c))))
 api.get("/projects/:id/organize", async (c) => c.json(await organize.read(c.req.param("id"))))
 api.put("/projects/:id/organize", async (c) => c.json(await organize.write(c.req.param("id"), await c.req.json())))
 api.delete("/projects/:id/note", async (c) => {

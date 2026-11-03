@@ -49,6 +49,9 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { ChatPanel } from "@/components/chat/chat-panel"
 import { LatexView } from "@/components/latex/latex-view"
 import { NoteEditor, SourceEditor } from "@/components/editor/note-editor"
+import { Backlinks } from "@/components/editor/backlinks"
+import type { NoteLinks } from "@/components/editor/note-links"
+import { resolveLink } from "@/lib/wikilinks"
 import { ProjectDialog } from "@/components/project-dialog"
 import { PaperView } from "@/components/papers/paper-view"
 import { CanvasView } from "@/components/canvas/canvas-view"
@@ -418,6 +421,8 @@ export function ProjectPage({ projectId, notePath, paperId, view, kbPage, settin
                 key={paneKey}
                 projectId={projectId}
                 path={notePath}
+                notes={allNotes}
+                onNotesChanged={refreshNotes}
                 chatOpen={chatOpen}
                 onToggleChat={() => setChatOpen((o) => !o)}
                 onRenamed={async (path, stay) => {
@@ -521,12 +526,16 @@ function headingOf(md: string) {
 function NotePane({
   projectId,
   path,
+  notes,
+  onNotesChanged,
   chatOpen,
   onToggleChat,
   onRenamed,
 }: {
   projectId: string
   path: string
+  notes: NoteFile[]
+  onNotesChanged: () => Promise<unknown>
   chatOpen: boolean
   onToggleChat: () => void
   onRenamed: (path: string, stay: boolean) => void
@@ -576,6 +585,32 @@ function NotePane({
     window.clearTimeout(renameTimer.current)
     renameTimer.current = window.setTimeout(renameToHeading, 800)
   }
+
+  // `[[Note]]` links: open the note, or make it first if it doesn't exist yet.
+  const notesRef = useRef(notes)
+  notesRef.current = notes
+  const links = useMemo<NoteLinks>(
+    () => ({
+      notes,
+      current: path,
+      open: async (target) => {
+        const found = resolveLink(target, notesRef.current)
+        if (found) return navigate({ name: "project", projectId, note: found.path })
+        try {
+          const { path: made } = await api.createNote(projectId, target)
+          await onNotesChanged()
+          navigate({ name: "project", projectId, note: made })
+        } catch (err) {
+          toast.error(`Couldn't create the note: ${(err as Error).message}`)
+        }
+      },
+      create: (name) => {
+        if (resolveLink(name, notesRef.current)) return
+        api.createNote(projectId, name).then(onNotesChanged, (err) => toast.error(`Couldn't create the note: ${err.message}`))
+      },
+    }),
+    [notes, path, projectId, onNotesChanged],
+  )
 
   const rename = async () => {
     const current = baseName(path)
@@ -658,8 +693,9 @@ function NotePane({
               (source ? (
                 <SourceEditor key="src" initialMarkdown={content} onChange={save} />
               ) : (
-                <NoteEditor key="rich" initialMarkdown={content} onChange={save} projectId={projectId} notePath={path} />
+                <NoteEditor key="rich" initialMarkdown={content} onChange={save} projectId={projectId} notePath={path} links={links} />
               ))}
+            {content !== null && <Backlinks projectId={projectId} path={path} refresh={notes} />}
           </div>
         </div>
         {feedback && (

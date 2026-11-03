@@ -20,6 +20,7 @@ import * as search from "./search.ts"
 import * as importers from "./importers.ts"
 import * as latex from "./latex.ts"
 import * as organize from "./organize.ts"
+import * as discover from "./discover.ts"
 import { backgroundModel } from "./ai.ts"
 
 const PORT = Number(process.env.RP_PORT ?? 5174)
@@ -133,9 +134,9 @@ api.delete("/projects/:id/note", async (c) => {
 api.get("/projects/:id/sources", async (c) => c.json(await sources.listSources(c.req.param("id"))))
 
 /** After a source is added: find its reference (PDFs and pages with a DOI) and file it into the knowledge base. */
-async function afterAdd(projectId: string, src: sources.Source, doi?: string) {
+async function afterAdd(projectId: string, src: sources.Source, doi?: string, opts: { skipReference?: boolean } = {}) {
   if (!src.hasText) return
-  if (src.type === "pdf" || doi)
+  if (!opts.skipReference && (src.type === "pdf" || doi))
     sources
       .sourceText(projectId, src.id)
       .then((text) => (src.type === "pdf" ? references.fromPaper(projectId, src.id, text) : references.fromPaper(projectId, src.id, "", doi)))
@@ -421,6 +422,75 @@ api.put("/projects/:id/canvas/drawing", async (c) => {
 api.post("/projects/:id/canvas/think", async (c) => {
   const { removed: _r, ...rest } = await canvas.think(c.req.param("id"))
   return c.json(rest)
+})
+
+// ---------- finding papers: OpenAlex, Semantic Scholar, arXiv, Crossref ----------
+const WorkSchema = z.object({
+  key: z.string().max(300),
+  title: z.string().max(2000),
+  authors: z.array(z.string().max(300)).max(500),
+  year: z.number().int().optional(),
+  venue: z.string().max(500).optional(),
+  doi: z.string().max(300).optional(),
+  arxivId: z.string().max(100).optional(),
+  abstract: z.string().max(20000).optional(),
+  citedBy: z.number().optional(),
+  url: z.string().max(2000).optional(),
+  pdfUrl: z.string().max(2000).optional(),
+  type: z.string().max(100).optional(),
+  from: z.array(z.enum(["openalex", "s2", "arxiv", "crossref"])),
+})
+api.get("/discover/search", async (c) => {
+  const q = c.req.query("q") ?? ""
+  const provider = z.enum(["all", "openalex", "s2", "arxiv", "crossref"]).catch("all").parse(c.req.query("provider"))
+  const num = (v?: string) => (v && /^\d{4}$/.test(v) ? Number(v) : undefined)
+  return c.json(
+    await discover.search(q, {
+      provider,
+      yearFrom: num(c.req.query("from")),
+      yearTo: num(c.req.query("to")),
+      openAccess: c.req.query("oa") === "1",
+    }),
+  )
+})
+api.post("/discover/around", async (c) => {
+  const body = z.object({ work: WorkSchema, relation: z.enum(["related", "citing", "references"]) }).parse(await c.req.json())
+  return c.json({ works: await discover.around(body.work, body.relation) })
+})
+/** Add a found paper: its reference always, and its free PDF as a source when asked and one exists. */
+api.post("/projects/:id/discover/add", async (c) => {
+  const id = c.req.param("id")
+  const { work, withPdf } = z.object({ work: WorkSchema, withPdf: z.boolean().default(false) }).parse(await c.req.json())
+  let source: sources.Source | undefined
+  let pdfError: string | undefined
+  // Already here with its PDF: don't download it twice.
+  const had = await references.findMatch(id, work)
+  if (had?.source) {
+    const src = await sources.getSource(id, had.source).catch(() => null)
+    if (src) return c.json({ reference: had, alreadyHad: true, source: src })
+  }
+  if (withPdf) {
+    const url = await discover.findPdf(work).catch(() => null)
+    if (!url) pdfError = "No free PDF was found for this paper, so only its reference was added."
+    else {
+      try {
+        const got = await importers.importLink(url).catch(() => null)
+        if (got?.kind !== "pdf") throw new Error("not a PDF")
+        const fileName = `${work.title.replace(/[\\/:*?"<>|#%]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 80) || "paper"}.pdf`
+        source = await sources.addPdf(id, fileName, got.bytes)
+        source = await sources.updateSource(id, source.id, { title: work.title })
+      } catch {
+        pdfError = "The free PDF couldn't be downloaded (it may need a login), so only the reference was added. Open the paper's page to get the PDF and upload it."
+      }
+    }
+  }
+  let item: Record<string, unknown> | null = null
+  if (work.doi) item = await references.lookupDoi(work.doi).catch(() => null)
+  item ??= discover.toCsl(work)
+  if (!item.abstract && work.abstract) item.abstract = work.abstract
+  const { added, existing } = await references.addItems(id, [item], source ? { source: source.id } : {})
+  if (source) await afterAdd(id, source, undefined, { skipReference: true })
+  return c.json({ reference: added[0] ?? existing[0], alreadyHad: !added.length, source, pdfError }, 201)
 })
 
 // ---------- references and citations ----------

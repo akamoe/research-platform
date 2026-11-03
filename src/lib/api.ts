@@ -182,6 +182,22 @@ export interface Reference {
   addedAt?: string
   [field: string]: unknown
 }
+export type DiscoverProvider = "openalex" | "s2" | "arxiv" | "crossref"
+export interface Work {
+  key: string
+  title: string
+  authors: string[]
+  year?: number
+  venue?: string
+  doi?: string
+  arxivId?: string
+  abstract?: string
+  citedBy?: number
+  url?: string
+  pdfUrl?: string
+  type?: string
+  from: DiscoverProvider[]
+}
 export interface RefCandidate {
   title: string
   authors: string
@@ -404,6 +420,17 @@ export const api = {
   saveDrawing: (id: string, drawing: { shapes: CanvasShape[]; arrows: CanvasArrow[] }) =>
     request<{ shapes: CanvasShape[]; arrows: CanvasArrow[] }>(`/projects/${id}/canvas/drawing`, json("PUT", drawing)),
   think: (id: string) => request<CanvasData>(`/projects/${id}/canvas/think`, { method: "POST" }),
+  discoverSearch: (q: string, o: { provider: DiscoverProvider | "all"; from?: string; to?: string; oa?: boolean }) =>
+    request<{ works: Work[]; failed: string[] }>(
+      `/discover/search?${new URLSearchParams({ q, provider: o.provider, from: o.from ?? "", to: o.to ?? "", oa: o.oa ? "1" : "" })}`,
+    ),
+  discoverAround: (work: Work, relation: "related" | "citing" | "references") =>
+    request<{ works: Work[] }>("/discover/around", json("POST", { work, relation })),
+  discoverAdd: (id: string, work: Work, withPdf: boolean) =>
+    request<{ reference: Reference; alreadyHad: boolean; source?: Source; pdfError?: string }>(
+      `/projects/${id}/discover/add`,
+      json("POST", { work, withPdf }),
+    ),
   references: (id: string) => request<Reference[]>(`/projects/${id}/references`),
   addReferences: (id: string, text: string) =>
     request<{ added: Reference[]; existing: Reference[]; candidates?: RefCandidate[] }>(`/projects/${id}/references`, json("POST", { text })),

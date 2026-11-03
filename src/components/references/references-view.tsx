@@ -10,6 +10,7 @@ import {
   PencilIcon,
   PlusIcon,
   SearchIcon,
+  TelescopeIcon,
   Trash2Icon,
   UploadIcon,
   XIcon,
@@ -296,6 +297,11 @@ export function ReferencesView({ projectId, notes, papers, chatOpen, onToggleCha
                         <DropdownMenuItem onSelect={() => copyFormatted(r)}>
                           <CopyIcon /> Copy formatted
                         </DropdownMenuItem>
+                        {r.DOI && (
+                          <DropdownMenuItem onSelect={() => navigate({ name: "project", projectId, view: "discover", page: r.DOI })}>
+                            <TelescopeIcon /> Find related papers
+                          </DropdownMenuItem>
+                        )}
                         <DropdownMenuSeparator />
                         <DropdownMenuItem variant="destructive" onSelect={() => remove(r)}>
                           <Trash2Icon /> Delete

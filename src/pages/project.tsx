@@ -5,6 +5,7 @@ import {
   QuoteIcon,
   SigmaIcon,
   SearchIcon,
+  TelescopeIcon,
   WaypointsIcon,
   CodeIcon,
   MessageSquareIcon,
@@ -50,6 +51,7 @@ import { PaperView } from "@/components/papers/paper-view"
 import { CanvasView } from "@/components/canvas/canvas-view"
 import { KnowledgeView } from "@/components/knowledge/knowledge-view"
 import { ReferencesView } from "@/components/references/references-view"
+import { DiscoverView } from "@/components/discover/discover-view"
 import { SearchDialog } from "@/components/search/search-dialog"
 import { LibrarySections } from "@/components/sidebar/library"
 import { AddSourceDialog } from "@/components/papers/add-source-dialog"
@@ -283,6 +285,14 @@ export function ProjectPage({ projectId, notePath, paperId, view, kbPage, settin
                 </SidebarMenuItem>
                 <SidebarMenuItem>
                   <SidebarMenuButton
+                    isActive={view === "discover"}
+                    onClick={() => navigate({ name: "project", projectId, view: "discover" })}
+                  >
+                    <TelescopeIcon /> Find papers
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
                     isActive={view === "references"}
                     onClick={() => navigate({ name: "project", projectId, view: "references" })}
                   >
@@ -329,6 +339,15 @@ export function ProjectPage({ projectId, notePath, paperId, view, kbPage, settin
           <div className="flex min-w-0 flex-1 flex-col">
             {view === "canvas" ? (
               <CanvasView projectId={projectId} chatOpen={chatOpen} onToggleChat={() => setChatOpen((o) => !o)} />
+            ) : view === "discover" ? (
+              <DiscoverView
+                projectId={projectId}
+                seed={kbPage}
+                papers={papers}
+                chatOpen={chatOpen}
+                onToggleChat={() => setChatOpen((o) => !o)}
+                onAdded={(s) => setPapers((ps) => (ps.some((p) => p.id === s.id) ? ps : [...ps, s]))}
+              />
             ) : view === "references" ? (
               <ReferencesView
                 projectId={projectId}

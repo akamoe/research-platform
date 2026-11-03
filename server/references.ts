@@ -103,6 +103,14 @@ function makeKey(r: Reference, taken: Set<string>) {
 const normDoi = (d?: string) => d?.trim().replace(/^https?:\/\/(dx\.)?doi\.org\//i, "").replace(/^doi:\s*/i, "").toLowerCase()
 const normTitle = (t?: string) => (t ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()
 
+/** The library's entry for a paper, by DOI or title. */
+export async function findMatch(projectId: string, w: { doi?: string; title?: string }) {
+  const items = await list(projectId)
+  const doi = normDoi(w.doi)
+  const title = normTitle(w.title)
+  return items.find((r) => (doi && normDoi(r.DOI) === doi) || (title && normTitle(r.title) === title)) ?? null
+}
+
 /** Clean an item from citation-js or a DOI service into the fields we keep. */
 function clean(item: Record<string, unknown>): Reference {
   const out: Record<string, unknown> = {}

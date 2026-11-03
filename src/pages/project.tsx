@@ -55,6 +55,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { ChatPanel } from "@/components/chat/chat-panel"
 import { MusicPlayer } from "@/components/music/music-player"
+import { PomodoroTimer } from "@/components/pomodoro/pomodoro-timer"
 import { LatexView } from "@/components/latex/latex-view"
 import { NoteEditor, SourceEditor } from "@/components/editor/note-editor"
 import { Backlinks } from "@/components/editor/backlinks"
@@ -401,6 +402,7 @@ export function ProjectPage({ projectId, notePath, paperId, view, kbPage, settin
           />
         </SidebarContent>
         <SidebarFooter>
+          <PomodoroTimer />
           <MusicPlayer />
           <SidebarMenu>
             <SidebarMenuItem>

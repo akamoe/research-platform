@@ -20,7 +20,7 @@ It runs on your own computer, opens in your browser, and keeps your files with y
 - **Search** (`Ctrl/⌘ K`): across every source and note, offline.
 - **References**: add by DOI, BibTeX or title; export in any style (APA, IEEE, Harvard…).
 - **Find papers**: search OpenAlex, Semantic Scholar and arXiv; add a paper with its free PDF in one click.
-- Also: literature matrix, flashcards from your highlights, a reading list, charts and tables from your data, thesis plan, writing feedback, a check for wording copied from your sources, a tracker for your supervisor's comments, version history and automatic backups, idea canvas, LaTeX editor, and export to Word and PDF.
+- Also: literature matrix, flashcards from your highlights, a reading list, charts and tables from your data, a Pomodoro timer, thesis plan, writing feedback, a check for wording copied from your sources, a tracker for your supervisor's comments, version history and automatic backups, idea canvas, LaTeX editor, and export to Word and PDF.
 
 ## Install (once)
 

@@ -143,6 +143,7 @@ api.patch("/projects/:id/note", async (c) => {
     await thesis.renameNote(c.req.param("id"), from, to).catch(() => {})
     await links.renameLinks(c.req.param("id"), from, to).catch(() => {})
     await history.move(c.req.param("id"), from, to).catch(() => {})
+    await sources.noteMoved(c.req.param("id"), from, to).catch(() => {})
   }
   return c.json({ path: to })
 })
@@ -162,6 +163,7 @@ api.get("/projects/:id/organize", async (c) => c.json(await organize.read(c.req.
 api.put("/projects/:id/organize", async (c) => c.json(await organize.write(c.req.param("id"), await c.req.json())))
 api.delete("/projects/:id/note", async (c) => {
   await projects.deleteNote(c.req.param("id"), notePathParam(c))
+  await sources.noteMoved(c.req.param("id"), notePathParam(c), null).catch(() => {})
   return c.json({ ok: true })
 })
 
@@ -297,6 +299,11 @@ api.get("/projects/:id/sources/:sid/assets/:file", async (c) => {
 api.patch("/projects/:id/sources/:sid", async (c) => {
   const body = z.object({ title: z.string().optional(), inChat: z.boolean().optional() }).parse(await c.req.json())
   return c.json(await sources.updateSource(c.req.param("id"), c.req.param("sid"), body))
+})
+/** Use a note with this source too, or stop using it. */
+api.put("/projects/:id/sources/:sid/notes", async (c) => {
+  const body = z.object({ path: z.string().min(1).max(600), attached: z.boolean() }).parse(await c.req.json())
+  return c.json(await sources.attachNote(c.req.param("id"), c.req.param("sid"), body.path, body.attached))
 })
 api.delete("/projects/:id/sources/:sid", async (c) => {
   await sources.deleteSource(c.req.param("id"), c.req.param("sid"))

@@ -59,6 +59,7 @@ import { PomodoroTimer } from "@/components/pomodoro/pomodoro-timer"
 import { LatexView } from "@/components/latex/latex-view"
 import { NoteEditor, SourceEditor } from "@/components/editor/note-editor"
 import { Backlinks } from "@/components/editor/backlinks"
+import { NotePapers } from "@/components/papers/note-picker"
 import { NoteHistory } from "@/components/editor/note-history"
 import { Outline } from "@/components/editor/outline"
 import type { NoteLinks } from "@/components/editor/note-links"
@@ -478,6 +479,7 @@ export function ProjectPage({ projectId, notePath, paperId, view, kbPage, settin
                   settings={settings}
                   onOpenSettings={onOpenSettings}
                   onRenamed={(s) => setPapers((ps) => ps.map((x) => (x.id === s.id ? s : x)))}
+                  onNotesChanged={refreshNotes}
                 />
               ) : null
             ) : notePath ? (
@@ -486,6 +488,7 @@ export function ProjectPage({ projectId, notePath, paperId, view, kbPage, settin
                 projectId={projectId}
                 path={notePath}
                 notes={allNotes}
+                papers={papers}
                 onNotesChanged={refreshNotes}
                 chatOpen={chatOpen}
                 onToggleChat={() => setChatOpen((o) => !o)}
@@ -591,6 +594,7 @@ function NotePane({
   projectId,
   path,
   notes,
+  papers,
   onNotesChanged,
   chatOpen,
   onToggleChat,
@@ -599,6 +603,7 @@ function NotePane({
   projectId: string
   path: string
   notes: NoteFile[]
+  papers: Source[]
   onNotesChanged: () => Promise<unknown>
   chatOpen: boolean
   onToggleChat: () => void
@@ -802,6 +807,7 @@ function NotePane({
               ) : (
                 <NoteEditor key={`rich-${rev}`} initialMarkdown={content} onChange={save} projectId={projectId} notePath={path} links={links} />
               ))}
+            {content !== null && <NotePapers projectId={projectId} path={path} papers={papers} />}
             {content !== null && <Backlinks projectId={projectId} path={path} refresh={notes} />}
           </div>
         </div>

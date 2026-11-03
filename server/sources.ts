@@ -3,7 +3,7 @@ import path from "node:path"
 import crypto from "node:crypto"
 import { extractText, getDocumentProxy, getMeta } from "unpdf"
 import { HttpError, PROJECTS_DIR, TRASH_DIR, safeJoin, writeFileAtomic } from "./paths.ts"
-import { createNote, getProject, touchProject } from "./projects.ts"
+import { createNote, getProject, readNote, touchProject } from "./projects.ts"
 
 export type SourceType = "pdf" | "web" | "youtube" | "text" | "docx"
 
@@ -32,6 +32,8 @@ export interface Source {
   extractor?: "pdf-inspector" | "pdf.js"
   /** False when the student left this paper out of the project chat. Missing means included. */
   inChat?: boolean
+  /** Other notes (inside notes/) the student writes about this source in, besides its own. */
+  notes?: string[]
   /** Pages whose text came from OCR (1-based), and the languages it read them in. */
   ocrPages?: number[]
   ocrLangs?: string[]
@@ -305,6 +307,39 @@ export async function updateSource(projectId: string, sourceId: string, patch: {
   }
   await saveSource(projectId, s)
   return s
+}
+
+/** Use a note with this source (a note can be used with several), or stop using it. */
+export async function attachNote(projectId: string, sourceId: string, notePath: string, attached: boolean) {
+  const s = await getSource(projectId, sourceId)
+  if (notePath === s.notePath) return s
+  const list = (s.notes ?? []).filter((p) => p !== notePath)
+  if (attached) {
+    await readNote(projectId, notePath) // it must exist
+    list.push(notePath)
+  }
+  if (list.length) s.notes = list
+  else delete s.notes
+  await saveSource(projectId, s)
+  return s
+}
+
+/** A note was renamed (to = the new path) or deleted (to = null): keep sources pointing at it. */
+export async function noteMoved(projectId: string, from: string, to: string | null) {
+  for (const s of await listSources(projectId)) {
+    let changed = false
+    if (to && s.notePath === from) {
+      s.notePath = to
+      changed = true
+    }
+    if (s.notes?.includes(from)) {
+      const list = s.notes.flatMap((p) => (p === from ? (to ? [to] : []) : [p]))
+      if (list.length) s.notes = [...new Set(list)]
+      else delete s.notes
+      changed = true
+    }
+    if (changed) await saveSource(projectId, s)
+  }
 }
 
 /** Moves the source's files, record and highlights to the trash. The student's note and captured images stay. */

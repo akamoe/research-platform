@@ -11,6 +11,7 @@ import { PdfAnnotator } from "./pdf-annotator"
 import { TextSource } from "./text-source"
 import { SourceSummary } from "./source-summary"
 import { OcrButton } from "./ocr-button"
+import { NotePicker, chosenNote } from "./note-picker"
 import { sourceType, unreadableNote } from "./source-kind"
 import { useNote } from "@/hooks/use-note"
 import { api, type PublicSettings, type Source } from "@/lib/api"
@@ -23,18 +24,25 @@ export function PaperView({
   settings,
   onOpenSettings,
   onRenamed,
+  onNotesChanged,
 }: {
   projectId: string
   source: Source
   settings: PublicSettings
   onOpenSettings: () => void
   onRenamed: (s: Source) => void
+  onNotesChanged?: () => void
 }) {
   const [tab, setTab] = useState<Tab>(() => {
     const t = localStorage.getItem("rp-paper-tab")
     return t === "chat" || t === "summary" ? t : "note"
   })
   const [title, setTitle] = useState(source.title)
+  // The note on the right: the paper's own, or one it shares with other papers.
+  const [notePath, setNotePath] = useState(() => chosenNote(source))
+  useEffect(() => {
+    if (notePath !== source.notePath && !source.notes?.includes(notePath)) setNotePath(chosenNote(source))
+  }, [source, notePath])
   const isPdf = sourceType(source) === "pdf"
   useEffect(() => localStorage.setItem("rp-paper-tab", tab), [tab])
   const inserter = useRef<NoteInserter | null>(null)
@@ -92,8 +100,20 @@ export function PaperView({
           <div className="flex h-full min-h-0 flex-col">
             <div className="flex shrink-0 items-center gap-1 border-b px-2 py-1.5">
               <TabButton active={tab === "note"} onClick={() => setTab("note")}>
-                <NotebookPenIcon className="size-3.5" /> Note
+                <NotebookPenIcon className="size-3.5" />
+                <span className="max-w-36 truncate">{notePath === source.notePath ? "Note" : notePath.replace(/\.md$/i, "").split("/").pop()}</span>
               </TabButton>
+              <NotePicker
+                projectId={projectId}
+                source={source}
+                current={notePath}
+                onPick={(p) => {
+                  setNotePath(p)
+                  setTab("note")
+                }}
+                onChanged={onRenamed}
+                onNotesChanged={onNotesChanged}
+              />
               <TabButton active={tab === "chat"} onClick={() => setTab("chat")}>
                 <MessageSquareIcon className="size-3.5" /> Chat
               </TabButton>
@@ -108,13 +128,13 @@ export function PaperView({
             </div>
             {/* Both stay mounted so a reply keeps streaming while you switch to the note. */}
             <div className={cn("min-h-0 flex-1", tab !== "note" && "hidden")}>
-              <PaperNote projectId={projectId} path={source.notePath} onReady={(i) => (inserter.current = i)} />
+              <PaperNote key={notePath} projectId={projectId} path={notePath} onReady={(i) => (inserter.current = i)} />
             </div>
             <div className={cn("min-h-0 flex-1", tab !== "chat" && "hidden")}>
               <ChatPanel
                 projectId={projectId}
                 settings={settings}
-                openNotePath={source.notePath}
+                openNotePath={notePath}
                 source={{ id: source.id, title: source.title }}
                 onOpenSettings={onOpenSettings}
               />

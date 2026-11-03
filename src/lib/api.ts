@@ -63,6 +63,8 @@ export interface Source {
   scannedPages?: number[]
   /** False when the student left this paper out of the project chat. */
   inChat?: boolean
+  /** Other notes the student writes about this source in, besides its own. */
+  notes?: string[]
   /** Pages whose text came from OCR. */
   ocrPages?: number[]
   ocrLangs?: string[]
@@ -556,6 +558,8 @@ export const api = {
   sourceText: (id: string, sid: string) => request<{ text: string }>(`/projects/${id}/sources/${sid}/text`),
   renameSource: (id: string, sid: string, title: string) =>
     request<Source>(`/projects/${id}/sources/${sid}`, json("PATCH", { title })),
+  attachNote: (id: string, sid: string, path: string, attached: boolean) =>
+    request<Source>(`/projects/${id}/sources/${sid}/notes`, json("PUT", { path, attached })),
   setSourceInChat: (id: string, sid: string, inChat: boolean) =>
     request<Source>(`/projects/${id}/sources/${sid}`, json("PATCH", { inChat })),
   search: (id: string, q: string, limit = 30) =>

@@ -16,6 +16,7 @@ export function mentorPrompt(opts: {
   knowledge?: { index: string; pages: string } | null
   passages?: { all: Source[]; hits: Hit[] }
   thesis?: string | null
+  supervisor?: string | null
 }) {
   const parts = [
     `You are a research mentor inside a student's research workspace. The student is working on the project "${opts.project.name}".`,
@@ -34,6 +35,9 @@ You never write the student's paper, article, thesis, essay or any part of it. T
 - Never invent citations, papers, authors or quotes. If you are not sure a source exists, say so.`,
     opts.thesis
       ? `## The student's own thesis plan and progress\nUse it to keep advice realistic about time (deadlines, what is left). It is their plan; don't rewrite it for them.\n${opts.thesis}`
+      : "",
+    opts.supervisor
+      ? `## Comments from the student's supervisor they haven't addressed yet\nHelp them understand and act on these when relevant; the fixes are theirs to write.\n${opts.supervisor}`
       : "",
     opts.noteTitles.length ? `## The student's notes in this project\n${opts.noteTitles.map((t) => `- ${t}`).join("\n")}` : "",
     opts.openNote

@@ -142,7 +142,7 @@ function Annotator({ docId, projectId, source, onInsert }: Props & { docId: stri
   const [flash, setFlash] = useState<string | null>(null)
   const zoom = useZoom(docId)
   const scale = zoom.state.currentZoomLevel
-  const { provides: scroll } = useScroll(docId)
+  const { provides: scroll, state: scrollState } = useScroll(docId)
   const { provides: selection } = useSelectionCapability()
   const { provides: capture, state: captureState } = useCapture(docId)
 
@@ -233,6 +233,15 @@ function Annotator({ docId, projectId, source, onInsert }: Props & { docId: stri
     // jump a few times while it does.
     const first = takePendingPage(source.id)
     if (first) for (const ms of [120, 400, 900]) timers.push(window.setTimeout(() => jump(first, "instant"), ms))
+    // Otherwise open where the student stopped reading last time.
+    else
+      api.reading(projectId).then(
+        (r) => {
+          const page = r.progress[source.id]?.page
+          if (page && page > 1) for (const ms of [120, 400, 900]) timers.push(window.setTimeout(() => jump({ sourceId: source.id, page }, "instant"), ms))
+        },
+        () => {},
+      )
     const on = (e: Event) => {
       const t = (e as CustomEvent<PageTarget>).detail
       if (t.sourceId !== source.id) return
@@ -245,6 +254,15 @@ function Annotator({ docId, projectId, source, onInsert }: Props & { docId: stri
       window.removeEventListener("rp:goto-page", on)
     }
   }, [source.id])
+
+  // Remember the page, for the reading list and to reopen the paper here.
+  const page = scrollState.currentPage
+  const total = scrollState.totalPages
+  useEffect(() => {
+    if (!page || !total) return
+    const t = window.setTimeout(() => void api.readingProgress(projectId, source.id, page, total).catch(() => {}), 1500)
+    return () => window.clearTimeout(t)
+  }, [page, total, projectId, source.id])
 
   // Clicking a quote or figure in the note scrolls here and flashes it.
   useEffect(() => {

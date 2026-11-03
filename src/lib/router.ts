@@ -4,7 +4,7 @@ import { useEffect, useState } from "react"
  * Tiny hash router: #/ , #/p/<projectId>?note=<path> , ?paper=<id> , ?view=canvas ,
  * ?view=knowledge&page=<page id>
  */
-export type View = "canvas" | "knowledge" | "references" | "latex" | "discover" | "thesis" | "matrix" | "supervisor" | "flashcards"
+export type View = "canvas" | "knowledge" | "references" | "latex" | "discover" | "thesis" | "matrix" | "supervisor" | "flashcards" | "reading"
 export type Route =
   | { name: "home" }
   | { name: "project"; projectId: string; note?: string; paper?: string; view?: View; page?: string }
@@ -20,7 +20,7 @@ function parse(): Route {
       projectId: m[1],
       note: params.get("note") ?? undefined,
       paper: params.get("paper") ?? undefined,
-      view: (["canvas", "knowledge", "references", "latex", "discover", "thesis", "matrix", "supervisor", "flashcards"] as const).find((v) => v === params.get("view")),
+      view: (["canvas", "knowledge", "references", "latex", "discover", "thesis", "matrix", "supervisor", "flashcards", "reading"] as const).find((v) => v === params.get("view")),
       page: params.get("page") ?? undefined,
     }
   return { name: "home" }

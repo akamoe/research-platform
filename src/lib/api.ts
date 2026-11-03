@@ -97,6 +97,14 @@ export interface Highlight {
   image?: string
   createdAt: string
 }
+export type ReadingStatus = "to-read" | "reading" | "read"
+export interface ReadingState {
+  order: string[]
+  items: Record<string, { status: ReadingStatus; addedAt: string; startedAt?: string; finishedAt?: string }>
+  progress: Record<string, { page: number; maxPage: number; pages: number; at: string }>
+  /** About how long each source on the list takes to read, in minutes. */
+  minutes: Record<string, number>
+}
 export type FlashRating = "again" | "hard" | "good" | "easy"
 export interface Flashcard {
   id: string
@@ -602,6 +610,12 @@ export const api = {
     request<{ issues: FeedbackIssue[] }>(`/projects/${id}/feedback`, json("POST", { ...target, ai })),
   similarity: (id: string, target: { notePath?: string; latexPath?: string }) =>
     request<SimilarityReport>(`/projects/${id}/similarity`, json("POST", target)),
+  reading: (id: string) => request<ReadingState>(`/projects/${id}/reading`),
+  setReading: (id: string, sid: string, status: ReadingStatus | null) =>
+    request<ReadingState>(`/projects/${id}/reading/${sid}`, json("PUT", { status })),
+  reorderReading: (id: string, order: string[]) => request<ReadingState>(`/projects/${id}/reading`, json("PUT", { order })),
+  readingProgress: (id: string, sid: string, page: number, pages: number) =>
+    request(`/projects/${id}/reading/${sid}/progress`, json("POST", { page, pages })),
   flashcards: (id: string) => request<Flashcard[]>(`/projects/${id}/flashcards`),
   createFlashcard: (id: string, card: { front: string; back: string; sourceId?: string; highlightId?: string; page?: number }) =>
     request<Flashcard>(`/projects/${id}/flashcards`, json("POST", card)),

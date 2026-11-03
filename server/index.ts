@@ -30,6 +30,7 @@ import * as feedback from "./feedback.ts"
 import * as similarity from "./similarity.ts"
 import * as backup from "./backup.ts"
 import * as flashcards from "./flashcards.ts"
+import * as reading from "./reading.ts"
 import * as exporter from "./export.ts"
 import * as supervisor from "./supervisor.ts"
 import { backgroundModel } from "./ai.ts"
@@ -503,6 +504,21 @@ api.get("/projects/:id/supervisor/:rid/file", async (c) => {
   })
 })
 
+// ---------- reading list ----------
+api.get("/projects/:id/reading", async (c) => c.json(await reading.state(c.req.param("id"))))
+api.put("/projects/:id/reading/:sid", async (c) => {
+  const body = z.object({ status: z.enum(["to-read", "reading", "read"]).nullable() }).parse(await c.req.json())
+  return c.json(await reading.setStatus(c.req.param("id"), c.req.param("sid"), body.status))
+})
+api.put("/projects/:id/reading", async (c) => {
+  const body = z.object({ order: z.array(z.string().regex(/^[\w-]+$/)).max(5000) }).parse(await c.req.json())
+  return c.json(await reading.reorder(c.req.param("id"), body.order))
+})
+api.post("/projects/:id/reading/:sid/progress", async (c) => {
+  const body = z.object({ page: z.number().int().min(1), pages: z.number().int().min(1) }).parse(await c.req.json())
+  return c.json(await reading.progress(c.req.param("id"), c.req.param("sid"), body.page, body.pages))
+})
+
 // ---------- flashcards from highlights ----------
 api.get("/projects/:id/flashcards", async (c) => {
   const cards = await flashcards.list(c.req.param("id"))
@@ -703,7 +719,11 @@ api.post("/projects/:id/discover/add", async (c) => {
   item ??= discover.toCsl(work)
   if (!item.abstract && work.abstract) item.abstract = work.abstract
   const { added, existing } = await references.addItems(id, [item], source ? { source: source.id } : {})
-  if (source) await afterAdd(id, source, undefined, { skipReference: true })
+  if (source) {
+    await afterAdd(id, source, undefined, { skipReference: true })
+    // A paper found and added from search is one to read.
+    await reading.setStatus(id, source.id, "to-read").catch(() => {})
+  }
   return c.json({ reference: added[0] ?? existing[0], alreadyHad: !added.length, source, pdfError }, 201)
 })
 

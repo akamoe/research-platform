@@ -110,7 +110,7 @@ function setup() {
   if (!fs.existsSync(built) || newest(inputs) > fs.statSync(built).mtimeMs) {
     notify("Building Folio. This takes about a minute.")
     say("Building Folio (about a minute)...")
-    run(NODE, [path.join(APP, "node_modules", "vite", "bin", "vite.js"), "build", "--logLevel", "warn"], "Building")
+    run(NODE, [path.join(APP, "node_modules", "vite", "bin", "vite.js"), "build", "--logLevel", "error"], "Building")
   }
 }
 

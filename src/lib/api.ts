@@ -225,6 +225,18 @@ export interface LatexEngineStatus {
   installable: boolean
   install: { done: number; total: number; error: string | null; running: boolean } | null
 }
+export interface Folder {
+  id: string
+  name: string
+  section: "sources" | "notes"
+  parent?: string
+}
+/** Stars and folders in the sidebar. Items are keyed "s:<sourceId>" or "n:<note path>". */
+export interface Organize {
+  starred: string[]
+  folders: Folder[]
+  placed: Record<string, string>
+}
 export interface LatexTemplate {
   id: string
   name: string
@@ -340,6 +352,8 @@ export const api = {
     form.append("folder", folder)
     return request<LatexFile[]>(`/projects/${id}/latex/upload`, { method: "POST", body: form })
   },
+  organize: (id: string) => request<Organize>(`/projects/${id}/organize`),
+  saveOrganize: (id: string, o: Organize) => request<Organize>(`/projects/${id}/organize`, json("PUT", o)),
   latexTemplates: () => request<LatexTemplate[]>("/latex/templates"),
   applyLatexTemplate: (id: string, template: string) =>
     request<{ files: LatexFile[]; kept: string | null }>(`/projects/${id}/latex/template`, json("POST", { id: template })),

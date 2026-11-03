@@ -6,9 +6,7 @@ import {
   SigmaIcon,
   SearchIcon,
   WaypointsIcon,
-  UploadIcon,
   CodeIcon,
-  FileTextIcon,
   MessageSquareIcon,
   MoreHorizontalIcon,
   PencilIcon,
@@ -34,13 +32,10 @@ import {
   SidebarContent,
   SidebarFooter,
   SidebarGroup,
-  SidebarGroupAction,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarInset,
   SidebarMenu,
-  SidebarMenuAction,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarProvider,
@@ -56,8 +51,9 @@ import { CanvasView } from "@/components/canvas/canvas-view"
 import { KnowledgeView } from "@/components/knowledge/knowledge-view"
 import { ReferencesView } from "@/components/references/references-view"
 import { SearchDialog } from "@/components/search/search-dialog"
+import { LibrarySections } from "@/components/sidebar/library"
 import { AddSourceDialog } from "@/components/papers/add-source-dialog"
-import { ACCEPT, SourceIcon, isAcceptedFile } from "@/components/papers/source-kind"
+import { ACCEPT, isAcceptedFile } from "@/components/papers/source-kind"
 import { api, type NoteFile, type Project, type PublicSettings, type Source } from "@/lib/api"
 import { navigate, type View } from "@/lib/router"
 import { useNote } from "@/hooks/use-note"
@@ -304,94 +300,18 @@ export function ProjectPage({ projectId, notePath, paperId, view, kbPage, settin
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
-          <SidebarGroup>
-            <SidebarGroupLabel>Sources</SidebarGroupLabel>
-            <SidebarGroupAction onClick={() => setAddingSource(true)} title="Add a source">
-              <PlusIcon /> <span className="sr-only">Add a source</span>
-            </SidebarGroupAction>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {papers.map((p) => (
-                  <SidebarMenuItem key={p.id}>
-                    <SidebarMenuButton
-                      isActive={p.id === paperId}
-                      onClick={() => navigate({ name: "project", projectId, paper: p.id })}
-                      title={p.title}
-                    >
-                      <SourceIcon source={p} />
-                      <span>{p.title}</span>
-                    </SidebarMenuButton>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <SidebarMenuAction showOnHover>
-                          <MoreHorizontalIcon />
-                        </SidebarMenuAction>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent side="right" align="start">
-                        <DropdownMenuItem variant="destructive" onSelect={() => setConfirmDelete({ kind: "paper", id: p.id })}>
-                          <Trash2Icon /> Remove source
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </SidebarMenuItem>
-                ))}
-                {uploading > 0 && (
-                  <SidebarMenuItem>
-                    <SidebarMenuButton disabled className="text-muted-foreground">
-                      <UploadIcon className="animate-pulse" /> Adding {uploading} file{uploading > 1 ? "s" : ""}…
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                )}
-                {papers.length === 0 && uploading === 0 && (
-                  <SidebarMenuItem>
-                    <SidebarMenuButton onClick={() => setAddingSource(true)} className="text-muted-foreground">
-                      <PlusIcon /> Add a source
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                )}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-          <SidebarGroup>
-            <SidebarGroupLabel>Notes</SidebarGroupLabel>
-            <SidebarGroupAction onClick={newNote} title="New note">
-              <PlusIcon /> <span className="sr-only">New note</span>
-            </SidebarGroupAction>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {notes.map((n) => (
-                  <SidebarMenuItem key={n.path}>
-                    <SidebarMenuButton
-                      isActive={n.path === notePath}
-                      onClick={() => navigate({ name: "project", projectId, note: n.path })}
-                    >
-                      <FileTextIcon />
-                      <span>{n.path.replace(/\.md$/i, "")}</span>
-                    </SidebarMenuButton>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <SidebarMenuAction showOnHover>
-                          <MoreHorizontalIcon />
-                        </SidebarMenuAction>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent side="right" align="start">
-                        <DropdownMenuItem variant="destructive" onSelect={() => setConfirmDelete({ kind: "note", path: n.path })}>
-                          <Trash2Icon /> Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </SidebarMenuItem>
-                ))}
-                {notes.length === 0 && (
-                  <SidebarMenuItem>
-                    <SidebarMenuButton onClick={newNote} className="text-muted-foreground">
-                      <PlusIcon /> New note
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                )}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
+          <LibrarySections
+            projectId={projectId}
+            sources={papers}
+            notes={notes}
+            paperId={paperId}
+            notePath={notePath}
+            uploading={uploading}
+            onAddSource={() => setAddingSource(true)}
+            onNewNote={newNote}
+            onRemoveSource={(id) => setConfirmDelete({ kind: "paper", id })}
+            onDeleteNote={(path) => setConfirmDelete({ kind: "note", path })}
+          />
         </SidebarContent>
         <SidebarFooter>
           <SidebarMenu>

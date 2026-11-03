@@ -19,6 +19,7 @@ import * as references from "./references.ts"
 import * as search from "./search.ts"
 import * as importers from "./importers.ts"
 import * as latex from "./latex.ts"
+import * as organize from "./organize.ts"
 import { backgroundModel } from "./ai.ts"
 
 const PORT = Number(process.env.RP_PORT ?? 5174)
@@ -116,8 +117,13 @@ api.post("/projects/:id/notes", async (c) => {
 })
 api.patch("/projects/:id/note", async (c) => {
   const body = z.object({ name: z.string(), unique: z.boolean().optional() }).parse(await c.req.json())
-  return c.json({ path: await projects.renameNote(c.req.param("id"), notePathParam(c), body.name, body.unique) })
+  const from = notePathParam(c)
+  const to = await projects.renameNote(c.req.param("id"), from, body.name, body.unique)
+  if (to !== from) await organize.renameKey(c.req.param("id"), `n:${from}`, `n:${to}`).catch(() => {})
+  return c.json({ path: to })
 })
+api.get("/projects/:id/organize", async (c) => c.json(await organize.read(c.req.param("id"))))
+api.put("/projects/:id/organize", async (c) => c.json(await organize.write(c.req.param("id"), await c.req.json())))
 api.delete("/projects/:id/note", async (c) => {
   await projects.deleteNote(c.req.param("id"), notePathParam(c))
   return c.json({ ok: true })

@@ -32,6 +32,9 @@ export interface Source {
   extractor?: "pdf-inspector" | "pdf.js"
   /** False when the student left this paper out of the project chat. Missing means included. */
   inChat?: boolean
+  /** Pages whose text came from OCR (1-based), and the languages it read them in. */
+  ocrPages?: number[]
+  ocrLangs?: string[]
 }
 
 export const MAX_PDF_BYTES = 200 * 1024 * 1024
@@ -72,6 +75,23 @@ export async function getSource(projectId: string, sourceId: string): Promise<So
 
 async function saveSource(projectId: string, s: Source) {
   await writeFileAtomic(file(projectId, s.id, "json"), JSON.stringify(s, null, 2))
+}
+
+/**
+ * Put new text for some pages of a source (from OCR) into its text file. Pages are the
+ * "[page N]" sections; a page that has no section yet gets one, in page order.
+ */
+export async function replacePages(projectId: string, sourceId: string, pages: Map<number, string>, patch: Partial<Source>) {
+  const src = await getSource(projectId, sourceId)
+  const text = await sourceText(projectId, sourceId)
+  const parts = new Map<number, string>()
+  for (const m of text.matchAll(/\[page (\d+)\]\n?([\s\S]*?)(?=\n*\[page \d+\]|\s*$)/g)) parts.set(Number(m[1]), m[2].trim())
+  for (const [n, t] of pages) parts.set(n, t.trim())
+  const out = [...parts.entries()].sort((a, b) => a[0] - b[0]).map(([n, t]) => `[page ${n}]\n${t}`).join("\n\n")
+  await fs.writeFile(file(projectId, sourceId, "txt"), out)
+  const next: Source = { ...src, ...patch, hasText: readable(out) }
+  await saveSource(projectId, next)
+  return next
 }
 
 export function pdfPath(projectId: string, sourceId: string) {
@@ -147,11 +167,13 @@ export async function readPdf(bytes: Uint8Array): Promise<PdfText> {
   const pdf = await getDocumentProxy(new Uint8Array(bytes))
   const meta = await getMeta(pdf).catch(() => null)
   const res = await extractText(pdf, { mergePages: false })
+  const pages = res.text as string[]
   return {
     pages: pdf.numPages,
     title: usableTitle((meta?.info as { Title?: string } | undefined)?.Title),
-    text: (res.text as string[]).map((t, i) => `[page ${i + 1}]\n${t.trim()}`).join("\n\n"),
-    scannedPages: [],
+    text: pages.map((t, i) => `[page ${i + 1}]\n${t.trim()}`).join("\n\n"),
+    // pdf.js can't tell scans apart; a page with next to no text probably is one (OCR finds out).
+    scannedPages: pages.flatMap((t, i) => (t.replace(/\s/g, "").length < 20 ? [i + 1] : [])),
     extractor: "pdf.js",
   }
 }

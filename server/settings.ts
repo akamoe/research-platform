@@ -21,6 +21,8 @@ export interface Settings {
   defaultModel?: { provider: ProviderId; model: string }
   /** Where and how often projects are backed up (see backup.ts). */
   backup?: { dir?: string; every?: "off" | "daily" | "weekly"; keep?: number }
+  /** The languages OCR last read scans in (see ocr.ts). */
+  ocrLangs?: string[]
 }
 
 export function isProvider(id: string): id is ProviderId {
@@ -30,7 +32,7 @@ export function isProvider(id: string): id is ProviderId {
 export async function readSettings(): Promise<Settings> {
   try {
     const raw = JSON.parse(await fs.readFile(SETTINGS_FILE, "utf8"))
-    return { providers: raw.providers ?? {}, defaultModel: raw.defaultModel, backup: raw.backup }
+    return { providers: raw.providers ?? {}, defaultModel: raw.defaultModel, backup: raw.backup, ocrLangs: raw.ocrLangs }
   } catch {
     return { providers: {} }
   }

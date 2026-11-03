@@ -143,7 +143,7 @@ export function SourceSummary({
       ) : !source.hasText ? (
         <p className="max-w-xs text-sm text-muted-foreground">
           {source.scannedPages?.length
-            ? "This PDF is a scan (pictures of pages, no text), so there is nothing to summarize yet."
+            ? "This PDF is a scan (pictures of pages, no text). Press “Read with OCR” above to read its words, then summarize it."
             : "No text could be read from this source, so there is nothing to summarize."}
         </p>
       ) : (

@@ -32,6 +32,7 @@ import * as backup from "./backup.ts"
 import * as flashcards from "./flashcards.ts"
 import * as reading from "./reading.ts"
 import * as figures from "./figures.ts"
+import * as ocr from "./ocr.ts"
 import * as exporter from "./export.ts"
 import * as supervisor from "./supervisor.ts"
 import { backgroundModel } from "./ai.ts"
@@ -168,7 +169,10 @@ api.delete("/projects/:id/note", async (c) => {
 api.get("/projects/:id/sources", async (c) => c.json(await sources.listSources(c.req.param("id"))))
 
 /** After a source is added: find its reference (PDFs and pages with a DOI) and file it into the knowledge base. */
+ocr.onText((projectId, src) => afterAdd(projectId, src))
+
 async function afterAdd(projectId: string, src: sources.Source, doi?: string, opts: { skipReference?: boolean } = {}) {
+  if ((src.type ?? "pdf") === "pdf") void ocr.auto(projectId, src).catch(() => {})
   if (!src.hasText) return
   if (!opts.skipReference && (src.type === "pdf" || doi))
     sources
@@ -326,6 +330,21 @@ api.post("/projects/:id/knowledge/ingest", async (c) => {
   return c.json(await knowledge.status(id))
 })
 /** A source's page in the knowledge base (its summary and key points), and whether it is being written. */
+// ---------- OCR for scanned pages ----------
+api.get("/projects/:id/sources/:sid/ocr", async (c) => {
+  const s = await readSettings()
+  return c.json({
+    job: ocr.status(c.req.param("id"), c.req.param("sid")),
+    langs: ocr.LANGS,
+    installed: await ocr.installedLangs(),
+    last: s.ocrLangs ?? null,
+  })
+})
+api.post("/projects/:id/sources/:sid/ocr", async (c) => {
+  const body = z.object({ langs: z.array(z.string().max(20)).min(1).max(4), all: z.boolean().optional() }).parse(await c.req.json())
+  return c.json(await ocr.start(c.req.param("id"), c.req.param("sid"), body.langs, { all: body.all }))
+})
+
 api.get("/projects/:id/sources/:sid/summary", async (c) => {
   const { id, sid } = c.req.param()
   const meta = await knowledge.findPaperPage(id, sid)

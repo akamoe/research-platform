@@ -63,6 +63,25 @@ export interface Source {
   scannedPages?: number[]
   /** False when the student left this paper out of the project chat. */
   inChat?: boolean
+  /** Pages whose text came from OCR. */
+  ocrPages?: number[]
+  ocrLangs?: string[]
+}
+export interface OcrJob {
+  state: "waiting" | "downloading" | "reading" | "done" | "error"
+  done: number
+  total: number
+  page?: number
+  langs: string[]
+  error?: string
+  empty?: number[]
+  finishedAt?: string
+}
+export interface OcrInfo {
+  job: OcrJob | null
+  langs: { id: string; name: string }[]
+  installed: string[]
+  last: string[] | null
 }
 export interface SearchHit {
   kind: "source" | "note"
@@ -532,6 +551,8 @@ export const api = {
   addSourceLink: (id: string, url: string) => request<Source>(`/projects/${id}/sources/link`, json("POST", { url })),
   addSourceText: (id: string, title: string, text: string) =>
     request<Source>(`/projects/${id}/sources/text`, json("POST", { title, text })),
+  ocr: (id: string, sid: string) => request<OcrInfo>(`/projects/${id}/sources/${sid}/ocr`),
+  startOcr: (id: string, sid: string, langs: string[]) => request<OcrJob>(`/projects/${id}/sources/${sid}/ocr`, json("POST", { langs })),
   sourceText: (id: string, sid: string) => request<{ text: string }>(`/projects/${id}/sources/${sid}/text`),
   renameSource: (id: string, sid: string, title: string) =>
     request<Source>(`/projects/${id}/sources/${sid}`, json("PATCH", { title })),

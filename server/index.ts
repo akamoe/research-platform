@@ -25,6 +25,7 @@ import * as thesis from "./thesis.ts"
 import * as links from "./links.ts"
 import * as matrix from "./matrix.ts"
 import * as feedback from "./feedback.ts"
+import * as exporter from "./export.ts"
 import { backgroundModel } from "./ai.ts"
 
 const PORT = Number(process.env.RP_PORT ?? 5174)
@@ -436,6 +437,44 @@ api.post("/projects/:id/canvas/think", async (c) => {
 // ---------- thesis plan and progress ----------
 api.get("/projects/:id/thesis", async (c) => c.json(await thesis.state(c.req.param("id"))))
 api.put("/projects/:id/thesis", async (c) => c.json(await thesis.update(c.req.param("id"), await c.req.json())))
+
+// ---------- export to Word, PDF and more (pandoc) ----------
+api.get("/export/status", async (c) => c.json(await exporter.status()))
+api.post("/export/install", async (c) => {
+  exporter.installPandoc()
+  return c.json(await exporter.status())
+})
+api.post("/projects/:id/export", async (c) => {
+  const body = z
+    .object({
+      notes: z.array(z.string().max(600)).min(1).max(100),
+      format: z.enum(["docx", "pdf", "odt", "html", "latex"]),
+      style: z.string().max(200).default("apa"),
+      title: z.string().max(300).optional(),
+      author: z.string().max(300).optional(),
+      toc: z.boolean().optional(),
+      name: z.string().max(200).optional(),
+    })
+    .parse(await c.req.json())
+  return c.json(await exporter.exportNotes(c.req.param("id"), body))
+})
+api.get("/projects/:id/exports/:file", async (c) => {
+  const file = c.req.param("file")
+  const data = await fs.promises.readFile(exporter.exportPath(c.req.param("id"), file)).catch(() => {
+    throw new HttpError(404, "Export not found")
+  })
+  const type: Record<string, string> = {
+    docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    pdf: "application/pdf",
+    odt: "application/vnd.oasis.opendocument.text",
+    html: "text/html; charset=utf-8",
+    tex: "text/plain; charset=utf-8",
+  }
+  return c.body(data, 200, {
+    "Content-Type": type[file.split(".").pop()!] ?? "application/octet-stream",
+    "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(file)}`,
+  })
+})
 
 // ---------- writing feedback (points at problems, never rewrites) ----------
 api.post("/projects/:id/feedback", async (c) => {

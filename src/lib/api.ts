@@ -182,6 +182,13 @@ export interface Reference {
   addedAt?: string
   [field: string]: unknown
 }
+export type ExportFormat = "docx" | "pdf" | "odt" | "html" | "latex"
+export interface ExportStatus {
+  pandoc: { path: string; bundled?: boolean } | null
+  installable: boolean
+  install: { done: number; total: number; error: string | null; running: boolean } | null
+  pdf: boolean
+}
 export type FeedbackKind = "clarity" | "structure" | "citation" | "grammar" | "style"
 export interface FeedbackIssue {
   id: string
@@ -474,6 +481,13 @@ export const api = {
   saveDrawing: (id: string, drawing: { shapes: CanvasShape[]; arrows: CanvasArrow[] }) =>
     request<{ shapes: CanvasShape[]; arrows: CanvasArrow[] }>(`/projects/${id}/canvas/drawing`, json("PUT", drawing)),
   think: (id: string) => request<CanvasData>(`/projects/${id}/canvas/think`, { method: "POST" }),
+  exportStatus: () => request<ExportStatus>("/export/status"),
+  installPandoc: () => request<ExportStatus>("/export/install", { method: "POST" }),
+  exportNotes: (
+    id: string,
+    body: { notes: string[]; format: ExportFormat; style: string; title?: string; author?: string; toc?: boolean; name?: string },
+  ) => request<{ file: string; missingCitations: string[]; style: string | null }>(`/projects/${id}/export`, json("POST", body)),
+  exportUrl: (id: string, file: string) => `/api/projects/${id}/exports/${encodeURIComponent(file)}`,
   feedback: (id: string, target: { notePath?: string; latexPath?: string }, ai: boolean) =>
     request<{ issues: FeedbackIssue[] }>(`/projects/${id}/feedback`, json("POST", { ...target, ai })),
   matrix: (id: string) => request<Matrix>(`/projects/${id}/matrix`),

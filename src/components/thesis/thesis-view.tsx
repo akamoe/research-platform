@@ -7,6 +7,7 @@ import {
   CircleDashedIcon,
   CircleDotIcon,
   CircleIcon,
+  DownloadIcon,
   FilePlusIcon,
   FileTextIcon,
   LinkIcon,
@@ -42,6 +43,7 @@ import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { api, type Chapter, type ChapterStatus, type LatexFile, type NoteFile, type ThesisPlan, type ThesisState } from "@/lib/api"
 import { navigate } from "@/lib/router"
+import { ExportDialog } from "@/components/export/export-dialog"
 import { cn } from "@/lib/utils"
 
 const STATUS: Record<ChapterStatus, { label: string; icon: typeof CircleIcon; className: string }> = {
@@ -199,13 +201,15 @@ function InlineTitle({ value, onChange, onDone }: { value: string; onChange: (v:
 
 interface Props {
   projectId: string
+  projectName: string
   notes: NoteFile[]
   chatOpen: boolean
   onToggleChat: () => void
   onNotesChanged: () => void
 }
 
-export function ThesisView({ projectId, notes, chatOpen, onToggleChat, onNotesChanged }: Props) {
+export function ThesisView({ projectId, projectName, notes, chatOpen, onToggleChat, onNotesChanged }: Props) {
+  const [exporting, setExporting] = useState(false)
   const [state, setState] = useState<ThesisState | null>(null)
   const [plan, setPlan] = useState<ThesisPlan | null>(null)
   const [texFiles, setTexFiles] = useState<LatexFile[]>([])
@@ -318,6 +322,15 @@ export function ThesisView({ projectId, notes, chatOpen, onToggleChat, onNotesCh
         <SidebarTrigger className="text-muted-foreground" />
         <span className="text-sm font-medium">Thesis</span>
         <div className="ml-auto flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 text-muted-foreground"
+            disabled={!plan?.chapters.some((c) => c.doc?.kind === "note")}
+            onClick={() => setExporting(true)}
+          >
+            <DownloadIcon /> Export thesis
+          </Button>
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
@@ -334,6 +347,27 @@ export function ThesisView({ projectId, notes, chatOpen, onToggleChat, onNotesCh
         </div>
       </div>
 
+      {plan && (
+        <ExportDialog
+          projectId={projectId}
+          open={exporting}
+          onOpenChange={setExporting}
+          notes={plan.chapters.flatMap((c) => (c.doc?.kind === "note" && state?.words[c.id] !== null ? [c.doc.path] : []))}
+          name={projectName}
+          thesis={{ title: projectName }}
+          note={(() => {
+            const none = plan.chapters.filter((c) => !c.doc).map((c) => c.title)
+            const tex = plan.chapters.filter((c) => c.doc?.kind === "latex").map((c) => c.title)
+            const left = [
+              none.length ? `${none.join(", ")} (no note linked)` : "",
+              tex.length ? `${tex.join(", ")} (written in LaTeX; compile those in the LaTeX tab)` : "",
+            ].filter(Boolean)
+            return left.length
+              ? `Exports the chapters linked to notes, in order, with your citations and one reference list. Left out: ${left.join("; ")}.`
+              : "Exports every chapter in order, each on a new page, with your citations and one reference list."
+          })()}
+        />
+      )}
       {plan && (
         <div className="min-h-0 flex-1 overflow-y-auto">
           <div className="mx-auto w-full max-w-3xl px-4 pt-4 pb-16">

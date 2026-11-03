@@ -9,6 +9,7 @@ import {
   GraduationCapIcon,
   TableIcon,
   SpellCheckIcon,
+  DownloadIcon,
   WaypointsIcon,
   CodeIcon,
   MessageSquareIcon,
@@ -60,6 +61,7 @@ import { ReferencesView } from "@/components/references/references-view"
 import { DiscoverView } from "@/components/discover/discover-view"
 import { ThesisView } from "@/components/thesis/thesis-view"
 import { FeedbackPanel, domTarget } from "@/components/feedback/feedback-panel"
+import { ExportDialog } from "@/components/export/export-dialog"
 import { MatrixView } from "@/components/matrix/matrix-view"
 import { SearchDialog } from "@/components/search/search-dialog"
 import { LibrarySections } from "@/components/sidebar/library"
@@ -369,6 +371,7 @@ export function ProjectPage({ projectId, notePath, paperId, view, kbPage, settin
             ) : view === "thesis" ? (
               <ThesisView
                 projectId={projectId}
+                projectName={project?.name ?? ""}
                 notes={allNotes}
                 chatOpen={chatOpen}
                 onToggleChat={() => setChatOpen((o) => !o)}
@@ -543,6 +546,7 @@ function NotePane({
   const { content, status, save: saveNote, sync, rename: renameFile, whenSaved } = useNote(projectId, path)
   const [source, setSource] = useState(false)
   const [feedback, setFeedback] = useState(false)
+  const [exporting, setExporting] = useState(false)
   const editorBox = useRef<HTMLDivElement>(null)
   const feedbackTarget = useMemo(() => domTarget(() => editorBox.current?.querySelector<HTMLElement>("[data-slate-editor]") ?? null), [])
   const [title, setTitle] = useState(baseName(path))
@@ -674,6 +678,14 @@ function NotePane({
         </Tooltip>
         <Tooltip>
           <TooltipTrigger asChild>
+            <Button variant="ghost" size="icon" className="size-8 text-muted-foreground" onClick={() => setExporting(true)} aria-label="Export">
+              <DownloadIcon className="size-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Export to Word or PDF</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
             <Button
               variant="ghost"
               size="icon"
@@ -698,6 +710,14 @@ function NotePane({
             {content !== null && <Backlinks projectId={projectId} path={path} refresh={notes} />}
           </div>
         </div>
+        <ExportDialog
+          projectId={projectId}
+          open={exporting}
+          onOpenChange={setExporting}
+          notes={[path]}
+          name={baseName(path)}
+          beforeExport={whenSaved}
+        />
         {feedback && (
           <aside className="w-80 shrink-0 border-l max-md:absolute max-md:inset-y-0 max-md:right-0 max-md:z-20 max-md:bg-background max-md:shadow-xl">
             <FeedbackPanel

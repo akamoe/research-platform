@@ -155,7 +155,7 @@ export function pdfPath(projectId: string) {
 // ---------- the TeX engine ----------
 
 const TECTONIC_VERSION = "0.17.0"
-const TOOLS_DIR = path.join(DATA_DIR, ".tools")
+export const TOOLS_DIR = path.join(DATA_DIR, ".tools")
 const exe = (name: string) => (process.platform === "win32" ? `${name}.exe` : name)
 const ownTectonic = () => path.join(TOOLS_DIR, `tectonic-${TECTONIC_VERSION}`, exe("tectonic"))
 
@@ -176,7 +176,7 @@ function tectonicAsset() {
 }
 
 /** Where TeX usually lives, even when the terminal that started Folio didn't put it on PATH. */
-function searchDirs() {
+export function searchDirs() {
   const extra =
     process.platform === "win32"
       ? []
@@ -186,7 +186,7 @@ function searchDirs() {
   return [...(process.env.PATH ?? "").split(path.delimiter).filter(Boolean), ...extra, tiny]
 }
 
-async function which(name: string) {
+export async function which(name: string) {
   for (const d of searchDirs()) {
     const p = path.join(d, exe(name))
     try {

@@ -433,6 +433,20 @@ async function loadStyle(id: string): Promise<{ key: string; locale?: string }> 
   return { key: id, locale }
 }
 
+/** A citation style as a .csl file on disk, for pandoc. Journal styles resolve to the style they borrow. */
+export async function styleFile(id: string): Promise<string | null> {
+  if (!/^[a-z0-9-]+$/.test(id)) return null
+  try {
+    const xml = (await cachedFetch(`${STYLES_RAW}/${id}.csl`, `${id}.csl`)) ?? (await cachedFetch(`${STYLES_RAW}/dependent/${id}.csl`, `${id}.csl`))
+    if (!xml) return null
+    const parent = /<link[^>]+rel="independent-parent"[^>]+href="[^"]*\/styles\/([a-z0-9-]+)"/.exec(xml)?.[1] ??
+      /<link[^>]+href="[^"]*\/styles\/([a-z0-9-]+)"[^>]+rel="independent-parent"/.exec(xml)?.[1]
+    return parent ? styleFile(parent) : path.join(CACHE, `${id}.csl`)
+  } catch {
+    return null
+  }
+}
+
 async function loadLocale(lang: string) {
   if (cslLocales().has(lang)) return lang
   try {

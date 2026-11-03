@@ -20,7 +20,28 @@ It runs on your own computer, opens in your browser, and keeps your files with y
 - **Search** (`Ctrl/⌘ K`): across every source and note, offline.
 - **References**: add by DOI, BibTeX or title; export in any style (APA, IEEE, Harvard…).
 - **Find papers**: search OpenAlex, Semantic Scholar and arXiv; add a paper with its free PDF in one click.
-- Also: literature matrix, flashcards from your highlights, a reading list, charts and tables from your data, OCR for scanned PDFs, a Pomodoro timer, thesis plan, writing feedback, a check for wording copied from your sources, a tracker for your supervisor's comments, version history and automatic backups, idea canvas, LaTeX editor, and export to Word and PDF.
+- **Writing**: notes with `[[links]]` and version history, one note across several papers, a LaTeX editor with journal templates and SyncTeX, charts and tables from your data, and export to Word and PDF.
+- **Planning**: thesis plan and deadlines, literature matrix, reading list, supervisor feedback tracker, and an idea canvas.
+- **Checking**: writing feedback, a similarity check against your own sources, flashcards from your highlights, and OCR for scanned PDFs.
+- **Focus**: a Pomodoro timer and a study music player.
+- **Safety**: automatic daily backups and restore.
+
+## What it can stand in for
+
+Not a full replacement, but it covers their job in one place:
+
+- **Zotero / Mendeley / EndNote**: references and citation styles
+- **Google Scholar / Semantic Scholar / Connected Papers**: finding papers, related and citing papers, free PDFs
+- **Overleaf / TeXstudio**: LaTeX with journal templates, live PDF and SyncTeX
+- **NotebookLM / ChatPDF / Elicit**: chat with your papers, with citations and summaries
+- **Readwise / RemNote / Acrobat**: PDF highlights linked to notes, and OCR for scanned PDFs
+- **Obsidian / Notion**: markdown notes, links and version history
+- **Miro / Heptabase**: idea canvas with drawing and arrows
+- **Excel (lit review) / Datawrapper**: literature matrix, and charts and tables from CSV
+- **Grammarly / Turnitin (self-check)**: writing feedback and a similarity check against your sources
+- **Trello / Notion planner / Word comments**: thesis plan, deadlines and supervisor feedback
+- **Anki / Quizlet**, **Pocket**, **Forest / Pomofocus**, **Spotify focus playlists**: flashcards, reading list, Pomodoro and music
+- **Time Machine / Dropbox history**: daily backups and restore
 
 ## Install (once)
 
@@ -56,13 +77,25 @@ To use chat and other AI features, open **Settings** and add an API key from Ope
 
 Open **Chat** to ask questions about your sources. Select a citation to return to the source, and check the answer yourself. The assistant helps you understand and review your work; you write the paper.
 
-## Your files and updates
+## Your files
 
 - **Back up your work:** Copy the `ResearchPlatform` folder in your home folder.
 - **Privacy:** Folio runs on your computer. When you use AI, the relevant text is sent to your chosen provider.
 - **Internet:** AI, paper and reference searches, and fetching web pages and YouTube videos need a connection. Search within your sources and notes works offline.
-- **Update:** Open **Settings → Check for updates**, then **Update now** (or run the same install command again). Your projects stay in place.
 - **Running in the background:** Folio stays open until you shut down your computer.
+
+## Update
+
+- **In Folio**: **Settings → Check for updates → Update now**. Folio updates and restarts itself; your projects stay in place.
+- **Or** run the same install line again.
+- **If you installed with git** (developers):
+
+  ```bash
+  cd research-platform
+  git pull origin main && npm ci && npm start
+  ```
+
+  If `git pull` refuses because of local changes, run `git stash` and try again. If it says port 5174 is in use, an old Folio is still running: on Mac or Linux run `lsof -ti :5174 | xargs kill`; on Windows, restart the computer.
 
 ## Contribute
 

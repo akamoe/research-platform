@@ -27,6 +27,7 @@ import * as history from "./history.ts"
 import * as matrix from "./matrix.ts"
 import * as feedback from "./feedback.ts"
 import * as exporter from "./export.ts"
+import * as supervisor from "./supervisor.ts"
 import { backgroundModel } from "./ai.ts"
 
 const PORT = Number(process.env.RP_PORT ?? 5174)
@@ -455,6 +456,38 @@ api.post("/projects/:id/canvas/think", async (c) => {
 api.get("/projects/:id/thesis", async (c) => c.json(await thesis.state(c.req.param("id"))))
 api.put("/projects/:id/thesis", async (c) => c.json(await thesis.update(c.req.param("id"), await c.req.json())))
 
+// ---------- supervisor feedback ----------
+api.get("/projects/:id/supervisor", async (c) => c.json(await supervisor.list(c.req.param("id"))))
+api.post("/projects/:id/supervisor", async (c) => {
+  const len = Number(c.req.header("content-length") ?? 0)
+  if (len > 100 * 1024 * 1024) throw new HttpError(413, "That file is larger than 100 MB")
+  const form = await c.req.parseBody()
+  const file = form.file
+  if (!(file instanceof File)) throw new HttpError(400, "No file uploaded")
+  return c.json(await supervisor.importFile(c.req.param("id"), file.name, new Uint8Array(await file.arrayBuffer())), 201)
+})
+api.patch("/projects/:id/supervisor/:rid", async (c) => {
+  const { title } = z.object({ title: z.string().min(1).max(200) }).parse(await c.req.json())
+  return c.json(await supervisor.rename(c.req.param("id"), c.req.param("rid"), title))
+})
+api.delete("/projects/:id/supervisor/:rid", async (c) => {
+  await supervisor.remove(c.req.param("id"), c.req.param("rid"))
+  return c.json({ ok: true })
+})
+api.patch("/projects/:id/supervisor/:rid/items/:iid", async (c) =>
+  c.json(await supervisor.updateItem(c.req.param("id"), c.req.param("rid"), c.req.param("iid"), await c.req.json())),
+)
+api.get("/projects/:id/supervisor/:rid/file", async (c) => {
+  const id = c.req.param("id")
+  const r = (await supervisor.list(id)).find((x) => x.id === c.req.param("rid"))
+  if (!r) throw new HttpError(404, "Not found")
+  const data = await fs.promises.readFile(supervisor.originalPath(id, r))
+  return c.body(data, 200, {
+    "Content-Type": r.kind === "pdf" ? "application/pdf" : "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "Content-Disposition": `${r.kind === "pdf" ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(r.fileName)}`,
+  })
+})
+
 // ---------- export to Word, PDF and more (pandoc) ----------
 api.get("/export/status", async (c) => c.json(await exporter.status()))
 api.post("/export/install", async (c) => {
@@ -711,6 +744,7 @@ api.post("/projects/:id/chat", async (c) => {
       knowledge: memory,
       passages,
       thesis: await thesis.brief(id).catch(() => null),
+      supervisor: await supervisor.brief(id).catch(() => null),
     }),
     messages: body.messages,
     signal: controller.signal,

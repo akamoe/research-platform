@@ -182,6 +182,27 @@ export interface Reference {
   addedAt?: string
   [field: string]: unknown
 }
+export type SupervisorStatus = "open" | "done" | "declined"
+export interface SupervisorItem {
+  id: string
+  type: "comment" | "insert" | "delete" | "replace" | "markup"
+  author?: string
+  date?: string
+  page?: number
+  anchor?: string
+  text: string
+  status: SupervisorStatus
+  reply?: string
+  resolvedAt?: string
+}
+export interface SupervisorReview {
+  id: string
+  title: string
+  fileName: string
+  kind: "docx" | "pdf"
+  importedAt: string
+  items: SupervisorItem[]
+}
 export type ExportFormat = "docx" | "pdf" | "odt" | "html" | "latex"
 export interface ExportStatus {
   pandoc: { path: string; bundled?: boolean } | null
@@ -486,6 +507,18 @@ export const api = {
   saveDrawing: (id: string, drawing: { shapes: CanvasShape[]; arrows: CanvasArrow[] }) =>
     request<{ shapes: CanvasShape[]; arrows: CanvasArrow[] }>(`/projects/${id}/canvas/drawing`, json("PUT", drawing)),
   think: (id: string) => request<CanvasData>(`/projects/${id}/canvas/think`, { method: "POST" }),
+  supervisor: (id: string) => request<SupervisorReview[]>(`/projects/${id}/supervisor`),
+  importSupervisor: (id: string, file: File) => {
+    const form = new FormData()
+    form.append("file", file)
+    return request<SupervisorReview>(`/projects/${id}/supervisor`, { method: "POST", body: form })
+  },
+  renameSupervisor: (id: string, rid: string, title: string) =>
+    request<SupervisorReview>(`/projects/${id}/supervisor/${rid}`, json("PATCH", { title })),
+  removeSupervisor: (id: string, rid: string) => request(`/projects/${id}/supervisor/${rid}`, { method: "DELETE" }),
+  updateSupervisorItem: (id: string, rid: string, iid: string, patch: { status?: SupervisorStatus; reply?: string }) =>
+    request<SupervisorItem>(`/projects/${id}/supervisor/${rid}/items/${iid}`, json("PATCH", patch)),
+  supervisorFileUrl: (id: string, rid: string) => `/api/projects/${id}/supervisor/${rid}/file`,
   exportStatus: () => request<ExportStatus>("/export/status"),
   installPandoc: () => request<ExportStatus>("/export/install", { method: "POST" }),
   exportNotes: (

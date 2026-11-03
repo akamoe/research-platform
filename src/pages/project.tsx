@@ -6,6 +6,7 @@ import {
   SigmaIcon,
   SearchIcon,
   TelescopeIcon,
+  GraduationCapIcon,
   WaypointsIcon,
   CodeIcon,
   MessageSquareIcon,
@@ -52,6 +53,7 @@ import { CanvasView } from "@/components/canvas/canvas-view"
 import { KnowledgeView } from "@/components/knowledge/knowledge-view"
 import { ReferencesView } from "@/components/references/references-view"
 import { DiscoverView } from "@/components/discover/discover-view"
+import { ThesisView } from "@/components/thesis/thesis-view"
 import { SearchDialog } from "@/components/search/search-dialog"
 import { LibrarySections } from "@/components/sidebar/library"
 import { AddSourceDialog } from "@/components/papers/add-source-dialog"
@@ -269,6 +271,14 @@ export function ProjectPage({ projectId, notePath, paperId, view, kbPage, settin
                 </SidebarMenuItem>
                 <SidebarMenuItem>
                   <SidebarMenuButton
+                    isActive={view === "thesis"}
+                    onClick={() => navigate({ name: "project", projectId, view: "thesis" })}
+                  >
+                    <GraduationCapIcon /> Thesis
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
                     isActive={view === "canvas"}
                     onClick={() => navigate({ name: "project", projectId, view: "canvas" })}
                   >
@@ -339,6 +349,14 @@ export function ProjectPage({ projectId, notePath, paperId, view, kbPage, settin
           <div className="flex min-w-0 flex-1 flex-col">
             {view === "canvas" ? (
               <CanvasView projectId={projectId} chatOpen={chatOpen} onToggleChat={() => setChatOpen((o) => !o)} />
+            ) : view === "thesis" ? (
+              <ThesisView
+                projectId={projectId}
+                notes={allNotes}
+                chatOpen={chatOpen}
+                onToggleChat={() => setChatOpen((o) => !o)}
+                onNotesChanged={refreshNotes}
+              />
             ) : view === "discover" ? (
               <DiscoverView
                 projectId={projectId}

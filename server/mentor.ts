@@ -15,6 +15,7 @@ export function mentorPrompt(opts: {
   paper?: { title: string; text: string; type?: string; scannedPages?: number[] }
   knowledge?: { index: string; pages: string } | null
   passages?: { all: Source[]; hits: Hit[] }
+  thesis?: string | null
 }) {
   const parts = [
     `You are a research mentor inside a student's research workspace. The student is working on the project "${opts.project.name}".`,
@@ -31,6 +32,9 @@ You never write the student's paper, article, thesis, essay or any part of it. T
 - Help them organise their own ideas: you may list the ideas THEY have expressed, but don't invent the structure of their paper for them.
 - Be concise. Prefer short answers and one good question over long lectures.
 - Never invent citations, papers, authors or quotes. If you are not sure a source exists, say so.`,
+    opts.thesis
+      ? `## The student's own thesis plan and progress\nUse it to keep advice realistic about time (deadlines, what is left). It is their plan; don't rewrite it for them.\n${opts.thesis}`
+      : "",
     opts.noteTitles.length ? `## The student's notes in this project\n${opts.noteTitles.map((t) => `- ${t}`).join("\n")}` : "",
     opts.openNote
       ? `## Note the student has open right now: ${opts.openNote.path}\n<note>\n${opts.openNote.content.slice(0, 40000)}\n</note>`

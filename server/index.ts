@@ -21,6 +21,7 @@ import * as importers from "./importers.ts"
 import * as latex from "./latex.ts"
 import * as organize from "./organize.ts"
 import * as discover from "./discover.ts"
+import * as thesis from "./thesis.ts"
 import { backgroundModel } from "./ai.ts"
 
 const PORT = Number(process.env.RP_PORT ?? 5174)
@@ -120,7 +121,10 @@ api.patch("/projects/:id/note", async (c) => {
   const body = z.object({ name: z.string(), unique: z.boolean().optional() }).parse(await c.req.json())
   const from = notePathParam(c)
   const to = await projects.renameNote(c.req.param("id"), from, body.name, body.unique)
-  if (to !== from) await organize.renameKey(c.req.param("id"), `n:${from}`, `n:${to}`).catch(() => {})
+  if (to !== from) {
+    await organize.renameKey(c.req.param("id"), `n:${from}`, `n:${to}`).catch(() => {})
+    await thesis.renameNote(c.req.param("id"), from, to).catch(() => {})
+  }
   return c.json({ path: to })
 })
 api.get("/projects/:id/organize", async (c) => c.json(await organize.read(c.req.param("id"))))
@@ -424,6 +428,10 @@ api.post("/projects/:id/canvas/think", async (c) => {
   return c.json(rest)
 })
 
+// ---------- thesis plan and progress ----------
+api.get("/projects/:id/thesis", async (c) => c.json(await thesis.state(c.req.param("id"))))
+api.put("/projects/:id/thesis", async (c) => c.json(await thesis.update(c.req.param("id"), await c.req.json())))
+
 // ---------- finding papers: OpenAlex, Semantic Scholar, arXiv, Crossref ----------
 const WorkSchema = z.object({
   key: z.string().max(300),
@@ -608,7 +616,15 @@ api.post("/projects/:id/chat", async (c) => {
     settings,
     provider,
     model: body.model,
-    system: mentorPrompt({ project, noteTitles: notes.map((n) => n.path), openNote, paper, knowledge: memory, passages }),
+    system: mentorPrompt({
+      project,
+      noteTitles: notes.map((n) => n.path),
+      openNote,
+      paper,
+      knowledge: memory,
+      passages,
+      thesis: await thesis.brief(id).catch(() => null),
+    }),
     messages: body.messages,
     signal: controller.signal,
   })

@@ -182,6 +182,34 @@ export interface Reference {
   addedAt?: string
   [field: string]: unknown
 }
+export type ChapterStatus = "todo" | "drafting" | "revising" | "done"
+export interface Chapter {
+  id: string
+  title: string
+  doc?: { kind: "note" | "latex"; path: string }
+  goal?: number
+  due?: string
+  status: ChapterStatus
+}
+export interface Milestone {
+  id: string
+  title: string
+  due?: string
+  done: boolean
+}
+export interface ThesisPlan {
+  submission?: string
+  goal?: number
+  chapters: Chapter[]
+  milestones: Milestone[]
+}
+export interface ThesisState {
+  plan: ThesisPlan
+  words: Record<string, number | null>
+  total: number
+  today: number
+  week: number
+}
 export type DiscoverProvider = "openalex" | "s2" | "arxiv" | "crossref"
 export interface Work {
   key: string
@@ -420,6 +448,8 @@ export const api = {
   saveDrawing: (id: string, drawing: { shapes: CanvasShape[]; arrows: CanvasArrow[] }) =>
     request<{ shapes: CanvasShape[]; arrows: CanvasArrow[] }>(`/projects/${id}/canvas/drawing`, json("PUT", drawing)),
   think: (id: string) => request<CanvasData>(`/projects/${id}/canvas/think`, { method: "POST" }),
+  thesis: (id: string) => request<ThesisState>(`/projects/${id}/thesis`),
+  saveThesis: (id: string, plan: ThesisPlan) => request<ThesisState>(`/projects/${id}/thesis`, json("PUT", plan)),
   discoverSearch: (q: string, o: { provider: DiscoverProvider | "all"; from?: string; to?: string; oa?: boolean }) =>
     request<{ works: Work[]; failed: string[] }>(
       `/discover/search?${new URLSearchParams({ q, provider: o.provider, from: o.from ?? "", to: o.to ?? "", oa: o.oa ? "1" : "" })}`,

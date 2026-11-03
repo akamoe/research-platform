@@ -17,6 +17,7 @@ import {
   QuoteIcon,
   ScrollTextIcon,
   SpellCheckIcon,
+  HistoryIcon,
   Trash2Icon,
   UploadIcon,
 } from "lucide-react"
@@ -44,6 +45,7 @@ import { cn } from "@/lib/utils"
 import { LatexEditor, usesNatbib, type EditorContext, type LatexEditorHandle } from "./latex-editor"
 import { PdfPreview } from "./pdf-preview"
 import { FeedbackPanel, type FeedbackTarget } from "@/components/feedback/feedback-panel"
+import { NoteHistory } from "@/components/editor/note-history"
 
 const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform)
 const MOD = isMac ? "⌘" : "Ctrl+"
@@ -79,6 +81,7 @@ export function LatexView({
 
   const editor = useRef<LatexEditorHandle>(null)
   const [feedback, setFeedback] = useState(false)
+  const [historyOpen, setHistoryOpen] = useState(false)
   const feedbackTarget = useMemo<FeedbackTarget>(
     () => ({
       mark: (quotes) => new Set(quotes.filter((q) => editor.current?.find(q))),
@@ -324,6 +327,21 @@ export function LatexView({
               <Button
                 variant="ghost"
                 size="icon"
+                className="size-8 text-muted-foreground"
+                onClick={() => setHistoryOpen(true)}
+                disabled={!!file?.library || !file?.text}
+                aria-label="History"
+              >
+                <HistoryIcon className="size-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Earlier versions of this file</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
                 className={cn("size-8 text-muted-foreground", feedback && "bg-muted text-foreground")}
                 onClick={() => setFeedback((f) => !f)}
                 disabled={!path.endsWith(".tex")}
@@ -425,6 +443,24 @@ export function LatexView({
           </pre>
         </DialogContent>
       </Dialog>
+
+      <NoteHistory
+        kind="latex"
+        projectId={projectId}
+        path={path}
+        open={historyOpen}
+        onOpenChange={setHistoryOpen}
+        beforeOpen={flush}
+        onRestore={async (text) => {
+          try {
+            await api.saveLatexFile(projectId, path, text)
+            setContent(text)
+            setRev((n) => n + 1)
+          } catch (e) {
+            toast.error((e as Error).message)
+          }
+        }}
+      />
 
       <TemplateDialog
         open={picking}

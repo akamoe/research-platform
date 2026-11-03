@@ -32,11 +32,20 @@ ResearchPlatform/
     matrix.json          the literature matrix
     supervisor/          drafts your supervisor commented on, and your progress on each comment
     exports/             Word, PDF and other files you exported
+    .history/            earlier versions of your notes and LaTeX files
   .tools/                Tectonic, if Folio downloaded it for you
   .trash/                deleted notes, sources and projects, so nothing is lost
+  backups/               daily backups of each project (unless you pick another folder)
 ```
 
-To back up your work, copy this folder.
+## Backups and history
+
+- **History**: Folio keeps a copy of each note, and of each LaTeX file, every 10 minutes while you write (the last 60). Press the clock button at the top right of a note or of the LaTeX tab, pick a time to read that version, and **Restore this version** to bring it back. The text you replace stays in the list.
+- **Backups**: every day, Folio zips each project that changed into a backup folder and keeps the last 10 of each. In **Settings → Backups** choose how often (every day, every week or off), press **Back up now**, or change the folder. Pick a folder that Dropbox, iCloud Drive, OneDrive or Google Drive syncs, and your backups are kept off this computer too. API keys are never in a backup.
+- **Restoring**: **Settings → Backups → Restore…** lists the backups in the folder. **As a copy** adds the backup as a new project next to yours; **Replace** puts the backup in place of the project and moves the current one to the trash. **Restore from a .zip file** takes a backup from anywhere.
+- **Another computer**: on the first computer, pick a synced folder for backups (or use **Download a backup** in the project's `…` menu). On the second, install Folio, choose the same synced folder in **Settings → Backups** and restore the project. Work on one computer at a time and back up before you switch: a backup is a copy, not live sync.
+
+You can also copy this whole folder yourself.
 
 ## Privacy
 

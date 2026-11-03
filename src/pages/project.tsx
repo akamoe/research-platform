@@ -9,6 +9,7 @@ import {
   GraduationCapIcon,
   TableIcon,
   MessageSquareQuoteIcon,
+  ArchiveIcon,
   SpellCheckIcon,
   DownloadIcon,
   WaypointsIcon,
@@ -263,6 +264,11 @@ export function ProjectPage({ projectId, notePath, paperId, view, kbPage, settin
                   <DropdownMenuContent align="start">
                     <DropdownMenuItem onSelect={() => setEditing(true)}>
                       <PencilIcon /> Rename
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <a href={api.projectBackupUrl(projectId)} download>
+                        <ArchiveIcon /> Download a backup
+                      </a>
                     </DropdownMenuItem>
                     <DropdownMenuItem variant="destructive" onSelect={() => setConfirmDelete({ kind: "project" })}>
                       <Trash2Icon /> Delete project

@@ -1,3 +1,4 @@
+import { Readable } from "node:stream"
 import fs from "node:fs"
 import path from "node:path"
 import crypto from "node:crypto"
@@ -27,6 +28,7 @@ import * as history from "./history.ts"
 import * as matrix from "./matrix.ts"
 import * as feedback from "./feedback.ts"
 import * as similarity from "./similarity.ts"
+import * as backup from "./backup.ts"
 import * as exporter from "./export.ts"
 import * as supervisor from "./supervisor.ts"
 import { backgroundModel } from "./ai.ts"
@@ -350,6 +352,17 @@ api.get("/projects/:id/latex/file", async (c) => c.json({ content: await latex.r
 api.put("/projects/:id/latex/file", async (c) => {
   const body = z.object({ content: z.string() }).parse(await c.req.json())
   await latex.writeFile(c.req.param("id"), latexPath(c), body.content)
+  await history.snapshot(c.req.param("id"), latexPath(c), body.content, false, "latex").catch(() => {})
+  return c.json({ ok: true })
+})
+api.get("/projects/:id/latex/history", async (c) => c.json(await history.list(c.req.param("id"), latexPath(c), "latex")))
+api.get("/projects/:id/latex/history/:version", async (c) =>
+  c.json({ content: await history.read(c.req.param("id"), latexPath(c), c.req.param("version"), "latex") }),
+)
+api.post("/projects/:id/latex/history", async (c) => {
+  const id = c.req.param("id")
+  const rel = latexPath(c)
+  await history.snapshot(id, rel, await latex.readFile(id, rel), true, "latex")
   return c.json({ ok: true })
 })
 api.post("/projects/:id/latex/file", async (c) => {
@@ -486,6 +499,38 @@ api.get("/projects/:id/supervisor/:rid/file", async (c) => {
   return c.body(data, 200, {
     "Content-Type": r.kind === "pdf" ? "application/pdf" : "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     "Content-Disposition": `${r.kind === "pdf" ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(r.fileName)}`,
+  })
+})
+
+// ---------- backups ----------
+api.get("/backups", async (c) => c.json(await backup.status()))
+api.put("/backups/settings", async (c) => {
+  const body = z
+    .object({ dir: z.string().max(1000).optional(), every: z.enum(["off", "daily", "weekly"]).optional(), keep: z.number().int().min(1).max(100).optional() })
+    .parse(await c.req.json())
+  return c.json(await backup.configure(body))
+})
+api.post("/backups/run", async (c) => {
+  await backup.run(true)
+  return c.json(await backup.status())
+})
+api.post("/backups/restore", async (c) => {
+  const body = z.object({ file: z.string().max(600), mode: z.enum(["copy", "replace"]).default("copy") }).parse(await c.req.json())
+  return c.json(await backup.restoreFromFolder(body.file, body.mode))
+})
+/** Restore from a backup zip the student picked (e.g. one downloaded on another computer). */
+api.post("/backups/import", async (c) => {
+  const form = await c.req.parseBody()
+  const file = form.file
+  if (!(file instanceof File)) throw new HttpError(400, "Choose a backup .zip file")
+  const mode = form.mode === "replace" ? "replace" : "copy"
+  return c.json(await backup.restore(new Uint8Array(await file.arrayBuffer()), mode))
+})
+api.get("/projects/:id/backup", async (c) => {
+  const { stream, fileName } = await backup.download(c.req.param("id"))
+  return c.body(Readable.toWeb(stream as Readable) as ReadableStream, 200, {
+    "Content-Type": "application/zip",
+    "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`,
   })
 })
 
@@ -824,6 +869,7 @@ serve({ fetch: app.fetch, port: PORT, hostname: "127.0.0.1" }, async (info) => {
       if (n) console.log(`  Re-read ${n} PDF${n === 1 ? "" : "s"} in "${p.name}" with pdf-inspector`)
     }
   })()
+  backup.schedule()
   if (process.argv.includes("--open")) {
     const { default: open } = await import("open")
     open(url).catch(() => {})

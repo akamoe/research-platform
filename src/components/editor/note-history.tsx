@@ -26,7 +26,10 @@ export function NoteHistory({
   onOpenChange,
   beforeOpen,
   onRestore,
+  kind = "note",
 }: {
+  /** A note, or a file in the LaTeX tab. */
+  kind?: "note" | "latex"
   projectId: string
   path: string
   open: boolean
@@ -38,6 +41,10 @@ export function NoteHistory({
   const [versions, setVersions] = useState<Version[] | null>(null)
   const [picked, setPicked] = useState<string | null>(null)
   const [text, setText] = useState<string | null>(null)
+  const calls =
+    kind === "latex"
+      ? { list: api.latexHistory, version: api.latexVersion, keep: api.keepLatexVersion }
+      : { list: api.noteHistory, version: api.noteVersion, keep: api.keepNoteVersion }
 
   useEffect(() => {
     if (!open) return
@@ -46,7 +53,7 @@ export function NoteHistory({
     setText(null)
     Promise.resolve(beforeOpen?.())
       .catch(() => {})
-      .then(() => api.noteHistory(projectId, path))
+      .then(() => calls.list(projectId, path))
       .then(
         (v) => {
           setVersions(v)
@@ -59,7 +66,7 @@ export function NoteHistory({
   useEffect(() => {
     if (!picked) return
     setText(null)
-    api.noteVersion(projectId, path, picked).then(
+    calls.version(projectId, path, picked).then(
       (v) => setText(v.content),
       (e) => toast.error(e.message),
     )
@@ -68,7 +75,7 @@ export function NoteHistory({
   const restore = async () => {
     if (text === null) return
     try {
-      await api.keepNoteVersion(projectId, path)
+      await calls.keep(projectId, path)
       onRestore(text)
       onOpenChange(false)
       toast.success("Restored. The version you replaced is still in History.")
@@ -82,7 +89,7 @@ export function NoteHistory({
       <SheetContent className="w-full gap-0 sm:max-w-3xl">
         <SheetHeader className="border-b">
           <SheetTitle>History</SheetTitle>
-          <SheetDescription>Folio keeps a copy of this note every 10 minutes while you write.</SheetDescription>
+          <SheetDescription>Folio keeps a copy of this {kind === "latex" ? "file" : "note"} every 10 minutes while you write.</SheetDescription>
         </SheetHeader>
         <div className="flex min-h-0 flex-1">
           <ul className="w-48 shrink-0 space-y-0.5 overflow-y-auto border-r p-2">
@@ -104,7 +111,7 @@ export function NoteHistory({
             ))}
           </ul>
           <div className="min-w-0 flex-1 overflow-y-auto px-6 py-4">
-            {text !== null && <pre className="font-serif text-[15px] leading-relaxed whitespace-pre-wrap">{text}</pre>}
+            {text !== null && <pre className={cn("leading-relaxed whitespace-pre-wrap", kind === "latex" ? "font-mono text-[13px]" : "font-serif text-[15px]")}>{text}</pre>}
           </div>
         </div>
         <SheetFooter className="flex-row justify-end border-t">

@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { clearModelCache } from "@/components/chat/model-picker"
 import { ThemePicker } from "@/components/theme-picker"
+import { BackupSettings } from "@/components/backups"
 import { useTheme } from "@/hooks/use-theme"
 import { api, type ProviderStatus, type PublicSettings } from "@/lib/api"
 import { cn } from "@/lib/utils"
@@ -71,6 +72,8 @@ export function SettingsDialog({
           <Label className="pt-2">Theme</Label>
           <ThemePicker />
         </div>
+        <Separator />
+        <BackupSettings open={open} />
       </DialogContent>
     </Dialog>
   )

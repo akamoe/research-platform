@@ -24,6 +24,24 @@ export interface PublicSettings {
   providers: ProviderStatus[]
   defaultModel: { provider: ProviderId; model: string } | null
 }
+export type BackupEvery = "off" | "daily" | "weekly"
+export interface BackupFile {
+  file: string
+  projectId: string
+  name: string
+  at: string
+  bytes: number
+}
+export interface BackupStatus {
+  dir: string
+  defaultDir: string
+  every: BackupEvery
+  keep: number
+  running: boolean
+  error: string | null
+  last: string | null
+  backups: BackupFile[]
+}
 export interface ChatMessage {
   role: "user" | "assistant"
   content: string
@@ -403,6 +421,18 @@ const q = (path: string) => `?path=${encodeURIComponent(path)}`
 
 export const api = {
   settings: () => request<PublicSettings>("/settings"),
+  backups: () => request<BackupStatus>("/backups"),
+  saveBackupSettings: (body: { dir?: string; every?: BackupEvery; keep?: number }) =>
+    request<BackupStatus>("/backups/settings", json("PUT", body)),
+  backUpNow: () => request<BackupStatus>("/backups/run", { method: "POST" }),
+  restoreBackup: (file: string, mode: "copy" | "replace") => request<Project>("/backups/restore", json("POST", { file, mode })),
+  importBackup: (file: File, mode: "copy" | "replace") => {
+    const form = new FormData()
+    form.append("file", file)
+    form.append("mode", mode)
+    return request<Project>("/backups/import", { method: "POST", body: form })
+  },
+  projectBackupUrl: (id: string) => `/api/projects/${id}/backup`,
   saveProvider: (id: ProviderId, body: { apiKey?: string; baseUrl?: string }) =>
     request<PublicSettings>(`/settings/providers/${id}`, json("PUT", body)),
   setDefaultModel: (provider: ProviderId, model: string) =>
@@ -431,6 +461,11 @@ export const api = {
   noteVersion: (id: string, path: string, version: string) =>
     request<{ content: string }>(`/projects/${id}/note/history/${version}${q(path)}`),
   keepNoteVersion: (id: string, path: string) => request(`/projects/${id}/note/history${q(path)}`, { method: "POST" }),
+  latexHistory: (id: string, path: string) =>
+    request<{ id: string; at: string; words: number }[]>(`/projects/${id}/latex/history${q(path)}`),
+  latexVersion: (id: string, path: string, version: string) =>
+    request<{ content: string }>(`/projects/${id}/latex/history/${version}${q(path)}`),
+  keepLatexVersion: (id: string, path: string) => request(`/projects/${id}/latex/history${q(path)}`, { method: "POST" }),
   backlinks: (id: string, path: string) =>
     request<{ path: string; name: string; excerpt: string }[]>(`/projects/${id}/note/backlinks${q(path)}`),
 

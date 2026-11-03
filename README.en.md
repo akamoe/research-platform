@@ -1,3 +1,5 @@
+![Folio — your research, in one place](docs/folio-banner.jpg)
+
 # Folio
 
 [عربي](README.md) · **English**
@@ -38,18 +40,29 @@ irm https://raw.githubusercontent.com/akamoe/research-platform/main/scripts/inst
 
 The first time takes a few minutes. Then Folio opens in your browser and you get a **Folio** icon like any other app: in Launchpad and Spotlight on a Mac (drag it to the Dock), or on the Desktop and in the Start menu on Windows.
 
-## Use
+## Start your first project
 
-1. Open Folio from its icon.
-2. In **Settings**, paste an API key from OpenAI, Anthropic, OpenRouter or OpenCode Go. Everything except the AI works without one.
-3. Make a project, add sources with the **+** next to Sources, and start.
+1. Open **Folio** from its icon and create a project for your research.
+2. Select **+** next to **Sources** to add a PDF, Word file, web page, YouTube video, or text. You can also drag files into the window.
+3. Open a source to read it and write notes beside it. Highlight text in a PDF to save a quote and return to its page later.
+4. Use **Find papers** to search for research. In **References**, add references by DOI, title, or BibTeX, then copy or export them in your preferred style.
+5. Write in **Notes**, organize chapters in **Thesis**, and compare sources in the **Literature matrix**. Export a note to Word or PDF when you need it.
 
-- **Update**: run the install line again. Your projects aren't touched.
-- **Your files**: in the `ResearchPlatform` folder in your home folder. Copy it to back up.
-- **Still running?** Folio runs in the background until you shut down, and uses very little.
-- **Privacy**: only your computer can reach it. The only thing that leaves is the text you send to the AI provider you chose.
+Press `Ctrl/⌘ K` to search your sources and notes. See the [full guide](docs/GUIDE.md) for more details.
 
-Every feature in detail: [the guide](docs/GUIDE.md).
+## Use AI
+
+To use chat and other AI features, open **Settings** and add an API key from OpenAI, Anthropic, OpenRouter, or OpenCode Go. AI features need an internet connection, and your provider may charge for usage. The rest of the app works without an API key.
+
+Open **Chat** to ask questions about your sources. Select a citation to return to the source, and check the answer yourself. The assistant helps you understand and review your work; you write the paper.
+
+## Your files and updates
+
+- **Back up your work:** Copy the `ResearchPlatform` folder in your home folder.
+- **Privacy:** Folio runs on your computer. When you use AI, the relevant text is sent to your chosen provider.
+- **Internet:** AI, paper and reference searches, and fetching web pages and YouTube videos need a connection. Search within your sources and notes works offline.
+- **Update:** Run the same install command again. Your projects stay in place.
+- **Running in the background:** Folio stays open until you shut down your computer.
 
 ## Contribute
 

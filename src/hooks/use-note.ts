@@ -66,5 +66,11 @@ export function useNote(projectId: string, path: string) {
   /** Resolves once every save so far has reached the disk. */
   const whenSaved = useCallback(() => queue.current, [])
 
-  return { content, status, save, sync, rename, whenSaved }
+  /** Show different text (e.g. a restored version); the caller saves it. */
+  const replace = useCallback((md: string) => {
+    latest.current = md
+    setContent(md)
+  }, [])
+
+  return { content, status, save, sync, rename, whenSaved, replace }
 }

@@ -12,6 +12,7 @@ import {
   DownloadIcon,
   WaypointsIcon,
   CodeIcon,
+  HistoryIcon,
   MessageSquareIcon,
   MoreHorizontalIcon,
   PencilIcon,
@@ -51,6 +52,7 @@ import { ChatPanel } from "@/components/chat/chat-panel"
 import { LatexView } from "@/components/latex/latex-view"
 import { NoteEditor, SourceEditor } from "@/components/editor/note-editor"
 import { Backlinks } from "@/components/editor/backlinks"
+import { NoteHistory } from "@/components/editor/note-history"
 import type { NoteLinks } from "@/components/editor/note-links"
 import { resolveLink } from "@/lib/wikilinks"
 import { ProjectDialog } from "@/components/project-dialog"
@@ -543,7 +545,10 @@ function NotePane({
   onToggleChat: () => void
   onRenamed: (path: string, stay: boolean) => void
 }) {
-  const { content, status, save: saveNote, sync, rename: renameFile, whenSaved } = useNote(projectId, path)
+  const { content, status, save: saveNote, sync, rename: renameFile, whenSaved, replace } = useNote(projectId, path)
+  const [historyOpen, setHistoryOpen] = useState(false)
+  // Bumped to load restored text into a fresh editor.
+  const [rev, setRev] = useState(0)
   const [source, setSource] = useState(false)
   const [feedback, setFeedback] = useState(false)
   const [exporting, setExporting] = useState(false)
@@ -689,6 +694,33 @@ function NotePane({
             <Button
               variant="ghost"
               size="icon"
+              className={cn("size-8 text-muted-foreground", historyOpen && "bg-muted text-foreground")}
+              onClick={() => setHistoryOpen(true)}
+              aria-label="History"
+            >
+              <HistoryIcon className="size-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>History</TooltipContent>
+        </Tooltip>
+        <NoteHistory
+          projectId={projectId}
+          path={path}
+          open={historyOpen}
+          onOpenChange={setHistoryOpen}
+          beforeOpen={whenSaved}
+          onRestore={(md) => {
+            replace(md)
+            setRev((r) => r + 1)
+            // After the old editor has saved what it had, so the restored text lands last.
+            window.setTimeout(() => save(md), 0)
+          }}
+        />
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
               className={cn("size-8 text-muted-foreground", chatOpen && "bg-muted text-foreground")}
               onClick={onToggleChat}
             >
@@ -703,9 +735,9 @@ function NotePane({
           <div className="mx-auto max-w-[720px] px-8 pt-6 sm:px-12">
             {content !== null &&
               (source ? (
-                <SourceEditor key="src" initialMarkdown={content} onChange={save} />
+                <SourceEditor key={`src-${rev}`} initialMarkdown={content} onChange={save} />
               ) : (
-                <NoteEditor key="rich" initialMarkdown={content} onChange={save} projectId={projectId} notePath={path} links={links} />
+                <NoteEditor key={`rich-${rev}`} initialMarkdown={content} onChange={save} projectId={projectId} notePath={path} links={links} />
               ))}
             {content !== null && <Backlinks projectId={projectId} path={path} refresh={notes} />}
           </div>

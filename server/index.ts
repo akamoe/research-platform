@@ -23,6 +23,7 @@ import * as organize from "./organize.ts"
 import * as discover from "./discover.ts"
 import * as thesis from "./thesis.ts"
 import * as links from "./links.ts"
+import * as history from "./history.ts"
 import * as matrix from "./matrix.ts"
 import * as feedback from "./feedback.ts"
 import * as exporter from "./export.ts"
@@ -115,6 +116,7 @@ api.get("/projects/:id/note", async (c) =>
 api.put("/projects/:id/note", async (c) => {
   const body = z.object({ content: z.string() }).parse(await c.req.json())
   await projects.writeNote(c.req.param("id"), notePathParam(c), body.content)
+  await history.snapshot(c.req.param("id"), notePathParam(c), body.content).catch(() => {})
   return c.json({ ok: true })
 })
 api.post("/projects/:id/notes", async (c) => {
@@ -129,8 +131,20 @@ api.patch("/projects/:id/note", async (c) => {
     await organize.renameKey(c.req.param("id"), `n:${from}`, `n:${to}`).catch(() => {})
     await thesis.renameNote(c.req.param("id"), from, to).catch(() => {})
     await links.renameLinks(c.req.param("id"), from, to).catch(() => {})
+    await history.move(c.req.param("id"), from, to).catch(() => {})
   }
   return c.json({ path: to })
+})
+api.get("/projects/:id/note/history", async (c) => c.json(await history.list(c.req.param("id"), notePathParam(c))))
+api.get("/projects/:id/note/history/:version", async (c) =>
+  c.json({ content: await history.read(c.req.param("id"), notePathParam(c), c.req.param("version")) }),
+)
+/** Keep a copy of the note as it is now, e.g. before restoring an older version over it. */
+api.post("/projects/:id/note/history", async (c) => {
+  const id = c.req.param("id")
+  const rel = notePathParam(c)
+  await history.snapshot(id, rel, await projects.readNote(id, rel), true)
+  return c.json({ ok: true })
 })
 api.get("/projects/:id/note/backlinks", async (c) => c.json(await links.backlinks(c.req.param("id"), notePathParam(c))))
 api.get("/projects/:id/organize", async (c) => c.json(await organize.read(c.req.param("id"))))

@@ -386,6 +386,11 @@ export const api = {
   renameNote: (id: string, path: string, name: string, unique?: boolean) =>
     request<{ path: string }>(`/projects/${id}/note${q(path)}`, json("PATCH", { name, unique })),
   deleteNote: (id: string, path: string) => request(`/projects/${id}/note${q(path)}`, { method: "DELETE" }),
+  noteHistory: (id: string, path: string) =>
+    request<{ id: string; at: string; words: number }[]>(`/projects/${id}/note/history${q(path)}`),
+  noteVersion: (id: string, path: string, version: string) =>
+    request<{ content: string }>(`/projects/${id}/note/history/${version}${q(path)}`),
+  keepNoteVersion: (id: string, path: string) => request(`/projects/${id}/note/history${q(path)}`, { method: "POST" }),
   backlinks: (id: string, path: string) =>
     request<{ path: string; name: string; excerpt: string }[]>(`/projects/${id}/note/backlinks${q(path)}`),
 

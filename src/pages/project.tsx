@@ -53,6 +53,7 @@ import {
 } from "@/components/ui/sidebar"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { ChatPanel } from "@/components/chat/chat-panel"
+import { MusicPlayer } from "@/components/music/music-player"
 import { LatexView } from "@/components/latex/latex-view"
 import { NoteEditor, SourceEditor } from "@/components/editor/note-editor"
 import { Backlinks } from "@/components/editor/backlinks"
@@ -390,6 +391,7 @@ export function ProjectPage({ projectId, notePath, paperId, view, kbPage, settin
           />
         </SidebarContent>
         <SidebarFooter>
+          <MusicPlayer />
           <SidebarMenu>
             <SidebarMenuItem>
               <SidebarMenuButton onClick={onOpenSettings} className="text-muted-foreground">

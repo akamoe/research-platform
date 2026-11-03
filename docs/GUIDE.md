@@ -77,6 +77,7 @@ Folio only listens on your own computer (`127.0.0.1`) and refuses requests from 
 - **Search** (`Ctrl/⌘ K`): finds words in the full text of every paper and note, with the matching passage, and opens the paper at that page. It runs on your computer, so it works offline and without an API key.
 - **Themes**: **Settings → Theme** picks the color theme. Folio (warm paper, oxblood ink) is the default; Neutral and 42 presets from [tweakcn](https://tweakcn.com) are built in. To use your own, design it on tweakcn, open **Code**, copy the CSS and press **Paste theme**. Light, dark and system mode work with every theme. Themes that use web fonts load them from Google Fonts when online.
 - **Chat** (`Ctrl/⌘ J`): pick any model from your connected providers. The assistant can see the note you have open (click the note chip to hide it). It also searches your papers for passages that match your question, answers from them, and cites them as small chips: click one to read the passage and open the PDF on that page. The papers chip under the box picks which papers it searches. It follows one firm rule in every model: it won't write your paper.
+- **Study music**: the player above **Settings** in the sidebar plays lofi hip hop and classical music from YouTube. Press play, or open the list button for other stations and the volume. Paste any YouTube video or playlist link there to add your own. Music keeps playing when you switch views or projects. It needs the internet, and if a live stream has ended Folio tries a backup stream.
 
 ## Credits
 

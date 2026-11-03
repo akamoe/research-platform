@@ -281,7 +281,10 @@ api.post("/projects/:id/sources/:sid/highlights", async (c) => {
 })
 api.patch("/projects/:id/sources/:sid/highlights/:hid", async (c) => {
   const body = z.object({ color: z.string().optional() }).parse(await c.req.json())
-  return c.json(await sources.updateHighlight(c.req.param("id"), c.req.param("sid"), c.req.param("hid"), body))
+  const h = await sources.updateHighlight(c.req.param("id"), c.req.param("sid"), c.req.param("hid"), body)
+  // Notes that quote it show its colour too.
+  if (body.color) await links.recolorHighlightLinks(c.req.param("id"), c.req.param("sid"), h.id, h.color)
+  return c.json(h)
 })
 api.delete("/projects/:id/sources/:sid/highlights/:hid", async (c) => {
   await sources.deleteHighlight(c.req.param("id"), c.req.param("sid"), c.req.param("hid"))

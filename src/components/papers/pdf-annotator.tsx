@@ -23,6 +23,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { api, type Highlight, type HighlightColor, type PdfRect, type Source } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import { takePendingPage, type PageTarget } from "@/lib/jump"
+import { highlightRecolored } from "@/lib/highlight-events"
 
 const COLORS: { id: HighlightColor; fill: string; dot: string; emoji: string }[] = [
   { id: "yellow", fill: "rgba(250, 204, 21, 0.38)", dot: "#facc15", emoji: "🟡" },
@@ -291,6 +292,7 @@ function Annotator({ docId, projectId, source, onInsert }: Props & { docId: stri
     try {
       const updated = await api.recolorHighlight(projectId, source.id, h.id, c)
       setHighlights((hs) => hs.map((x) => (x.id === h.id ? updated : x)))
+      highlightRecolored(source.id, h.id, colorOf(c).emoji)
     } catch (err) {
       toast.error((err as Error).message)
     }

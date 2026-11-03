@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from "react"
 import { Plate, PlateContent, usePlateEditor } from "platejs/react"
 import { MarkdownPlugin } from "@platejs/markdown"
+import { KEYS, type TElement } from "platejs"
 import { editorPlugins, unescapeCitations } from "./plugins"
 import { EditorToolbar } from "./toolbar"
 import { NoteLinkMenu, NoteLinksContext, type NoteLinks } from "./note-links"
 import { CiteMenu, SlashMenu } from "./slash-menu"
+import { onHighlightRecolored } from "@/lib/highlight-events"
 
 /** Lets the paper view drop quotes and figures into the note. */
 export interface NoteInserter {
@@ -59,6 +61,20 @@ export function NoteEditor({ initialMarkdown, onChange, onReady, projectId, note
     })
     return () => onReady?.(null)
   }, [editor]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // A highlight changed colour in the PDF: change the dot on its links here too.
+  useEffect(
+    () =>
+      onHighlightRecolored(({ url, dot }) => {
+        const found = [...editor.api.nodes<TElement>({ at: [], match: (n) => (n as TElement).type === KEYS.link && (n as { url?: string }).url === url })]
+        for (const [, path] of found.reverse()) {
+          const text = editor.api.string(path)
+          const next = text.replace(/^\S+/u, dot)
+          if (next !== text) editor.tf.insertText(next, { at: editor.api.range(path) })
+        }
+      }),
+    [editor],
+  )
 
   return (
     <NoteLinksContext.Provider value={links ?? null}>
@@ -121,6 +137,22 @@ export function SourceEditor({ initialMarkdown, onChange, onReady }: Props) {
     })
     return () => onReady?.(null)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(
+    () =>
+      onHighlightRecolored(({ url, dot }) =>
+        setValue((v) => {
+          const esc = url.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")
+          const next = v.replace(new RegExp(`\\[[^\\s\\[\\]]+( [^\\]\\n]*)\\]\\(${esc}\\)`, "gu"), (_m, rest: string) => `[${dot}${rest}](${url})`)
+          if (next !== v) {
+            latest.current = next
+            window.clearTimeout(timer.current)
+            timer.current = window.setTimeout(flush, 600)
+          }
+          return next
+        }),
+      ),
+    [], // eslint-disable-line react-hooks/exhaustive-deps
+  )
   return (
     <textarea
       value={value}

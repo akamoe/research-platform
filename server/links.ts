@@ -67,3 +67,26 @@ export async function renameLinks(id: string, from: string, to: string) {
 }
 
 const baseName = (rel: string) => rel.replace(/\.md$/i, "").split("/").pop() ?? rel
+
+/** The dot each highlight colour shows in a note's `[🟡 p. 3](#hl/…)` link (as in pdf-annotator.tsx). */
+export const HIGHLIGHT_DOTS: Record<string, string> = { yellow: "🟡", green: "🟢", blue: "🔵", red: "🔴", purple: "🟣" }
+const DOT = Object.values(HIGHLIGHT_DOTS).join("|")
+
+/** After a highlight changes colour, change the dot in every note that links to it. */
+export async function recolorHighlightLinks(id: string, sourceId: string, highlightId: string, color: string) {
+  const dot = HIGHLIGHT_DOTS[color]
+  if (!dot || !/^[\w-]+$/.test(sourceId) || !/^[\w-]+$/.test(highlightId)) return 0
+  const target = `(#hl/${sourceId}/${highlightId})`
+  const re = new RegExp(`\\[(?:${DOT})( [^\\]\\n]*)\\]\\(#hl/${sourceId}/${highlightId}\\)`, "gu")
+  let changed = 0
+  for (const n of await listNotes(id)) {
+    const text = await readNote(id, n.path).catch(() => "")
+    if (!text.includes(target)) continue
+    const next = text.replace(re, (_all, rest: string) => `[${dot}${rest}]${target}`)
+    if (next !== text) {
+      await writeNote(id, n.path, next)
+      changed++
+    }
+  }
+  return changed
+}

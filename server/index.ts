@@ -22,6 +22,7 @@ import * as latex from "./latex.ts"
 import * as organize from "./organize.ts"
 import * as discover from "./discover.ts"
 import * as thesis from "./thesis.ts"
+import * as matrix from "./matrix.ts"
 import { backgroundModel } from "./ai.ts"
 
 const PORT = Number(process.env.RP_PORT ?? 5174)
@@ -431,6 +432,16 @@ api.post("/projects/:id/canvas/think", async (c) => {
 // ---------- thesis plan and progress ----------
 api.get("/projects/:id/thesis", async (c) => c.json(await thesis.state(c.req.param("id"))))
 api.put("/projects/:id/thesis", async (c) => c.json(await thesis.update(c.req.param("id"), await c.req.json())))
+
+// ---------- literature review matrix ----------
+api.get("/projects/:id/matrix", async (c) => c.json(await matrix.read(c.req.param("id"))))
+api.put("/projects/:id/matrix", async (c) => c.json(await matrix.write(c.req.param("id"), await c.req.json())))
+api.post("/projects/:id/matrix/fill", async (c) => {
+  const body = z
+    .object({ sourceId: z.string().regex(/^[\w-]+$/), columns: z.array(z.string()).optional(), overwrite: z.boolean().optional() })
+    .parse(await c.req.json())
+  return c.json(await matrix.fill(c.req.param("id"), body.sourceId, body.columns, { overwrite: body.overwrite }))
+})
 
 // ---------- finding papers: OpenAlex, Semantic Scholar, arXiv, Crossref ----------
 const WorkSchema = z.object({

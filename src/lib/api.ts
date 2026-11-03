@@ -182,6 +182,22 @@ export interface Reference {
   addedAt?: string
   [field: string]: unknown
 }
+export interface MatrixCell {
+  text: string
+  by: "ai" | "student"
+  none?: boolean
+  at?: string
+}
+export interface MatrixColumn {
+  id: string
+  name: string
+  hint?: string
+}
+export interface Matrix {
+  columns: MatrixColumn[]
+  cells: Record<string, Record<string, MatrixCell>>
+  hidden: string[]
+}
 export type ChapterStatus = "todo" | "drafting" | "revising" | "done"
 export interface Chapter {
   id: string
@@ -448,6 +464,10 @@ export const api = {
   saveDrawing: (id: string, drawing: { shapes: CanvasShape[]; arrows: CanvasArrow[] }) =>
     request<{ shapes: CanvasShape[]; arrows: CanvasArrow[] }>(`/projects/${id}/canvas/drawing`, json("PUT", drawing)),
   think: (id: string) => request<CanvasData>(`/projects/${id}/canvas/think`, { method: "POST" }),
+  matrix: (id: string) => request<Matrix>(`/projects/${id}/matrix`),
+  saveMatrix: (id: string, m: Matrix) => request<Matrix>(`/projects/${id}/matrix`, json("PUT", m)),
+  fillMatrix: (id: string, sourceId: string, columns?: string[], overwrite?: boolean) =>
+    request<{ row: Record<string, MatrixCell>; filled: number }>(`/projects/${id}/matrix/fill`, json("POST", { sourceId, columns, overwrite })),
   thesis: (id: string) => request<ThesisState>(`/projects/${id}/thesis`),
   saveThesis: (id: string, plan: ThesisPlan) => request<ThesisState>(`/projects/${id}/thesis`, json("PUT", plan)),
   discoverSearch: (q: string, o: { provider: DiscoverProvider | "all"; from?: string; to?: string; oa?: boolean }) =>

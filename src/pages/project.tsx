@@ -7,6 +7,7 @@ import {
   SearchIcon,
   TelescopeIcon,
   GraduationCapIcon,
+  TableIcon,
   WaypointsIcon,
   CodeIcon,
   MessageSquareIcon,
@@ -54,6 +55,7 @@ import { KnowledgeView } from "@/components/knowledge/knowledge-view"
 import { ReferencesView } from "@/components/references/references-view"
 import { DiscoverView } from "@/components/discover/discover-view"
 import { ThesisView } from "@/components/thesis/thesis-view"
+import { MatrixView } from "@/components/matrix/matrix-view"
 import { SearchDialog } from "@/components/search/search-dialog"
 import { LibrarySections } from "@/components/sidebar/library"
 import { AddSourceDialog } from "@/components/papers/add-source-dialog"
@@ -311,6 +313,14 @@ export function ProjectPage({ projectId, notePath, paperId, view, kbPage, settin
                 </SidebarMenuItem>
                 <SidebarMenuItem>
                   <SidebarMenuButton
+                    isActive={view === "matrix"}
+                    onClick={() => navigate({ name: "project", projectId, view: "matrix" })}
+                  >
+                    <TableIcon /> Literature matrix
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
                     isActive={view === "latex"}
                     onClick={() => navigate({ name: "project", projectId, view: "latex" })}
                   >
@@ -349,6 +359,8 @@ export function ProjectPage({ projectId, notePath, paperId, view, kbPage, settin
           <div className="flex min-w-0 flex-1 flex-col">
             {view === "canvas" ? (
               <CanvasView projectId={projectId} chatOpen={chatOpen} onToggleChat={() => setChatOpen((o) => !o)} />
+            ) : view === "matrix" ? (
+              <MatrixView projectId={projectId} papers={papers} chatOpen={chatOpen} onToggleChat={() => setChatOpen((o) => !o)} />
             ) : view === "thesis" ? (
               <ThesisView
                 projectId={projectId}

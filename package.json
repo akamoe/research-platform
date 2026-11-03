@@ -8,6 +8,9 @@
     "build": "tsc -b && vite build",
     "start": "vite build && tsx server/index.ts --open",
     "serve": "tsx server/index.ts",
+    "folio": "node scripts/launch.mjs",
+    "stop": "node scripts/launch.mjs --stop",
+    "shortcut": "node scripts/shortcut.mjs",
     "typecheck": "tsc -b",
     "lint": "oxlint"
   },

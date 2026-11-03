@@ -55,6 +55,9 @@ app.onError((err, c) => {
 
 const api = new Hono()
 
+// The launcher asks this to tell a running Folio apart from another app on the port.
+api.get("/health", (c) => c.json({ app: "folio", pid: process.pid }))
+
 // ---------- settings ----------
 api.get("/settings", async (c) => c.json(publicSettings(await readSettings())))
 

@@ -7,6 +7,8 @@
 //   node scripts/launch.mjs --background  same, but Folio keeps running in the background
 //   node scripts/launch.mjs --stop        stop a Folio started in the background
 //   node scripts/launch.mjs --setup       only install and build (the installer uses this)
+//   --no-open                             don't open the browser
+//   --after <pid>                         first wait for that process to exit (used by "Check for updates")
 
 import { spawn, spawnSync } from "node:child_process"
 import crypto from "node:crypto"
@@ -24,6 +26,7 @@ const WIN = process.platform === "win32"
 const MAC = process.platform === "darwin"
 const args = new Set(process.argv.slice(2))
 const background = args.has("--background")
+const afterPid = Number(process.argv[process.argv.indexOf("--after") + 1]) || 0
 
 // npm sits next to whichever node runs this (the installer's own copy, or the system one).
 const env = { ...process.env, PATH: path.dirname(NODE) + path.delimiter + (process.env.PATH ?? "") }
@@ -61,6 +64,7 @@ async function running() {
 }
 
 async function openBrowser() {
+  if (args.has("--no-open")) return
   try {
     const { default: open } = await import("open")
     await open(URL_)
@@ -129,6 +133,17 @@ function stop() {
 }
 
 const server = [path.join(APP, "node_modules", "tsx", "dist", "cli.mjs"), path.join(APP, "server", "index.ts")]
+
+function alive(pid) {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (e) {
+    return e.code === "EPERM"
+  }
+}
+
+if (afterPid) for (let i = 0; i < 120 && alive(afterPid); i++) await new Promise((r) => setTimeout(r, 250))
 
 if (args.has("--stop")) {
   say(stop() ? "Folio stopped." : "Folio wasn't running in the background.")

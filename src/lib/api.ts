@@ -469,6 +469,26 @@ export interface LatexResult {
   engine: LatexEngine["kind"]
 }
 
+export interface UpdateCommit {
+  sha: string
+  title: string
+  date: string
+}
+export interface UpdateCheck {
+  kind: "git" | "download"
+  current: { sha: string | null; date: string | null }
+  latest: UpdateCommit | null
+  behind: number
+  commits: UpdateCommit[]
+  available: boolean
+  blocked?: string
+}
+export interface UpdateJob {
+  state: "idle" | "running" | "restarting" | "done" | "error"
+  step: string
+  error?: string
+}
+
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`/api${url}`, {
     ...init,
@@ -491,6 +511,10 @@ const q = (path: string) => `?path=${encodeURIComponent(path)}`
 export const api = {
   settings: () => request<PublicSettings>("/settings"),
   backups: () => request<BackupStatus>("/backups"),
+  checkUpdate: () => request<UpdateCheck>("/update"),
+  startUpdate: () => request<UpdateJob>("/update", { method: "POST" }),
+  updateProgress: () => request<UpdateJob>("/update/progress"),
+  health: () => request<{ app: string; pid: number }>("/health"),
   saveBackupSettings: (body: { dir?: string; every?: BackupEvery; keep?: number }) =>
     request<BackupStatus>("/backups/settings", json("PUT", body)),
   backUpNow: () => request<BackupStatus>("/backups/run", { method: "POST" }),

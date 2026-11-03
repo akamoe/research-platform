@@ -61,7 +61,7 @@ Open **Chat** to ask questions about your sources. Select a citation to return t
 - **Back up your work:** Copy the `ResearchPlatform` folder in your home folder.
 - **Privacy:** Folio runs on your computer. When you use AI, the relevant text is sent to your chosen provider.
 - **Internet:** AI, paper and reference searches, and fetching web pages and YouTube videos need a connection. Search within your sources and notes works offline.
-- **Update:** Run the same install command again. Your projects stay in place.
+- **Update:** Open **Settings → Check for updates**, then **Update now** (or run the same install command again). Your projects stay in place.
 - **Running in the background:** Folio stays open until you shut down your computer.
 
 ## Contribute

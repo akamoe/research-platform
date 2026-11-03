@@ -9,6 +9,7 @@ import { Separator } from "@/components/ui/separator"
 import { clearModelCache } from "@/components/chat/model-picker"
 import { ThemePicker } from "@/components/theme-picker"
 import { BackupSettings } from "@/components/backups"
+import { UpdateSettings } from "@/components/updates"
 import { useTheme } from "@/hooks/use-theme"
 import { api, type ProviderStatus, type PublicSettings } from "@/lib/api"
 import { cn } from "@/lib/utils"
@@ -74,6 +75,8 @@ export function SettingsDialog({
         </div>
         <Separator />
         <BackupSettings open={open} />
+        <Separator />
+        <UpdateSettings />
       </DialogContent>
     </Dialog>
   )

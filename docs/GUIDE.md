@@ -51,6 +51,10 @@ ResearchPlatform/
 
 You can also copy this whole folder yourself.
 
+## Updates
+
+Open **Settings** and press **Check for updates** at the bottom. Folio asks GitHub for the newest version and lists what changed. **Update now** downloads it, installs and builds what changed, restarts Folio and reloads the page, which takes a minute or a few. Your projects aren't touched. If Folio was installed with `git clone`, it runs `git pull` instead; it won't update a copy that is on another branch or has its own commits, so use git there.
+
 ## Privacy
 
 Folio only listens on your own computer (`127.0.0.1`) and refuses requests from other websites. Your files never leave your machine, except the text you send to the AI provider you chose when you use an AI feature. Finding papers, the first pandoc download, DOI lookup, title search, web and YouTube sources and uncommon citation styles need the internet; everything else works offline.

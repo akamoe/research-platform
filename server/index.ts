@@ -36,6 +36,7 @@ import * as ocr from "./ocr.ts"
 import * as synctex from "./synctex.ts"
 import * as exporter from "./export.ts"
 import * as supervisor from "./supervisor.ts"
+import * as updater from "./update.ts"
 import { backgroundModel } from "./ai.ts"
 
 const PORT = Number(process.env.RP_PORT ?? 5174)
@@ -66,6 +67,11 @@ const api = new Hono()
 
 // The launcher asks this to tell a running Folio apart from another app on the port.
 api.get("/health", (c) => c.json({ app: "folio", pid: process.pid }))
+
+// ---------- check for updates (Settings) ----------
+api.get("/update", async (c) => c.json(await updater.check()))
+api.post("/update", async (c) => c.json(await updater.start()))
+api.get("/update/progress", (c) => c.json(updater.progress()))
 
 // ---------- settings ----------
 api.get("/settings", async (c) => c.json(publicSettings(await readSettings())))

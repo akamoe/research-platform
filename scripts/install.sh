@@ -46,9 +46,13 @@ fi
 # 2. Folio itself. Stop a running copy first so it can be replaced.
 [ -f "$FOLIO_HOME/app/scripts/launch.mjs" ] && "$NODE" "$FOLIO_HOME/app/scripts/launch.mjs" --stop >/dev/null 2>&1 || true
 say "Downloading Folio..."
-curl -fSL --progress-bar "https://codeload.github.com/$REPO/tar.gz/refs/heads/$BRANCH" -o "$tmp/folio.tar.gz"
+# The exact commit, so Settings → Check for updates knows which version this is.
+commit="$(curl -fsSL -H 'Accept: application/vnd.github+json' "https://api.github.com/repos/$REPO/commits/$BRANCH" 2>/dev/null \
+  | grep -m1 -oE '"sha": *"[0-9a-f]{40}"' | grep -oE '[0-9a-f]{40}' || true)"
+curl -fSL --progress-bar "https://codeload.github.com/$REPO/tar.gz/${commit:-refs/heads/$BRANCH}" -o "$tmp/folio.tar.gz"
 mkdir "$tmp/src"
 tar -xzf "$tmp/folio.tar.gz" -C "$tmp/src" --strip-components 1
+[ -n "$commit" ] && printf '{"sha":"%s"}\n' "$commit" > "$tmp/src/.folio-version"
 rm -rf "$FOLIO_HOME/app"
 mv "$tmp/src" "$FOLIO_HOME/app"
 

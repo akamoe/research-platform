@@ -6,3 +6,4 @@ dist
 .folio.pid
 folio.log
 scripts/.folio-open.sh
+.folio-version

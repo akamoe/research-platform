@@ -39,10 +39,14 @@ try {
   $launch = Join-Path $FolioHome 'app\scripts\launch.mjs'
   if (Test-Path $launch) { & $Node $launch --stop | Out-Null }
   Say 'Downloading Folio...'
-  Invoke-WebRequest -UseBasicParsing "https://codeload.github.com/$Repo/zip/refs/heads/$Branch" -OutFile "$tmp\folio.zip"
+  # The exact commit, so Settings > Check for updates knows which version this is.
+  $commit = try { (Invoke-RestMethod -UseBasicParsing "https://api.github.com/repos/$Repo/commits/$Branch").sha } catch { $null }
+  $ref = if ($commit) { $commit } else { "refs/heads/$Branch" }
+  Invoke-WebRequest -UseBasicParsing "https://codeload.github.com/$Repo/zip/$ref" -OutFile "$tmp\folio.zip"
   Expand-Archive "$tmp\folio.zip" -DestinationPath "$tmp\src"
   if (Test-Path "$FolioHome\app") { Remove-Item -Recurse -Force "$FolioHome\app" }
   Move-Item (Get-ChildItem "$tmp\src" -Directory | Select-Object -First 1).FullName "$FolioHome\app"
+  if ($commit) { Set-Content -Encoding ascii -Path "$FolioHome\app\.folio-version" -Value "{`"sha`":`"$commit`"}" }
 
   # 3. Install its parts, build it, make the icons and open it.
   & $Node $launch --setup

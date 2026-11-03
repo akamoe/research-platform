@@ -38,6 +38,7 @@ import { ImagePlugin } from "@platejs/media/react"
 import remarkGfm from "remark-gfm"
 import * as N from "./nodes"
 import { WikiLinkPlugin } from "./note-links"
+import { DragPlugin } from "./block-draggable"
 
 const headingOpts = { inputRules: [HeadingRules.markdown()], rules: { break: { empty: "reset" as const } } }
 const blockTargets = [...KEYS.heading, KEYS.p, KEYS.blockquote, KEYS.codeBlock]
@@ -194,4 +195,5 @@ export const editorPlugins = [
   HighlightPastePlugin,
   CitationPlugin,
   WikiLinkPlugin,
+  DragPlugin,
 ]

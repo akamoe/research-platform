@@ -4,6 +4,7 @@ import { MarkdownPlugin } from "@platejs/markdown"
 import { editorPlugins, unescapeCitations } from "./plugins"
 import { EditorToolbar } from "./toolbar"
 import { NoteLinkMenu, NoteLinksContext, type NoteLinks } from "./note-links"
+import { CiteMenu, SlashMenu } from "./slash-menu"
 
 /** Lets the paper view drop quotes and figures into the note. */
 export interface NoteInserter {
@@ -75,7 +76,7 @@ export function NoteEditor({ initialMarkdown, onChange, onReady, projectId, note
         className="sticky top-0 z-10 -mx-2 mb-4 border-b bg-background/95 px-1 py-1.5 backdrop-blur" />
       <PlateContent
         className="min-h-[60vh] pb-[30vh] font-serif text-[17px] leading-[1.75] outline-none [&_strong]:font-semibold"
-        placeholder="Start writing. Markdown works: # heading, - list, > quote, **bold**, [[note]]"
+        placeholder="Start writing. Markdown works: # heading, - list, > quote, **bold**, [[note]], / for blocks"
         spellCheck
         autoFocus
         onMouseDown={() => {
@@ -86,6 +87,8 @@ export function NoteEditor({ initialMarkdown, onChange, onReady, projectId, note
         }}
       />
       {links && <NoteLinkMenu />}
+      <SlashMenu />
+      {projectId && <CiteMenu projectId={projectId} />}
     </Plate>
     </NoteLinksContext.Provider>
   )

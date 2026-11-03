@@ -38,6 +38,7 @@
     "@embedpdf/plugin-tiling": "^2.15.1",
     "@embedpdf/plugin-viewport": "^2.15.1",
     "@embedpdf/plugin-zoom": "^2.15.1",
+    "@firecrawl/pdf-inspector": "^1.25.2",
     "@hono/node-server": "^2.1.6",
     "@lezer/highlight": "1.2.5",
     "@mozilla/readability": "^0.6.0",

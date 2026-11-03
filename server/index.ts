@@ -504,10 +504,10 @@ api.post("/projects/:id/chat", async (c) => {
       }
     } catch {}
   }
-  let paper: { title: string; text: string; type?: string } | undefined
+  let paper: { title: string; text: string; type?: string; scannedPages?: number[] } | undefined
   if (body.sourceId) {
     const src = await sources.getSource(id, body.sourceId)
-    paper = { title: src.title, text: await sources.sourceText(id, src.id), type: src.type }
+    paper = { title: src.title, text: await sources.sourceText(id, src.id), type: src.type, scannedPages: src.scannedPages }
   }
   const lastQuestion = [...body.messages].reverse().find((m) => m.role === "user")?.content ?? ""
   const memory = await knowledge.contextFor(id, `${lastQuestion} ${paper?.title ?? ""}`)
@@ -587,6 +587,13 @@ serve({ fetch: app.fetch, port: PORT, hostname: "127.0.0.1" }, async (info) => {
   const url = `http://localhost:${info.port}`
   console.log(`\n  Folio running at ${url}`)
   console.log(`  Your files are in ${DATA_DIR}\n`)
+  // Once per PDF: papers added before pdf-inspector get their text read again, quietly.
+  void (async () => {
+    for (const p of await projects.listProjects().catch(() => [])) {
+      const n = await sources.upgradePdfText(p.id).catch(() => 0)
+      if (n) console.log(`  Re-read ${n} PDF${n === 1 ? "" : "s"} in "${p.name}" with pdf-inspector`)
+    }
+  })()
   if (process.argv.includes("--open")) {
     const { default: open } = await import("open")
     open(url).catch(() => {})

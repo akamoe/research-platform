@@ -41,6 +41,8 @@ export interface Source {
   pages: number
   notePath: string
   hasText: boolean
+  /** PDF pages that are scanned images, so their words can't be read yet (1-based). */
+  scannedPages?: number[]
   /** False when the student left this paper out of the project chat. */
   inChat?: boolean
 }

@@ -10,7 +10,7 @@ import { NoteEditor, SourceEditor, type NoteInserter } from "@/components/editor
 import { PdfAnnotator } from "./pdf-annotator"
 import { TextSource } from "./text-source"
 import { SourceSummary } from "./source-summary"
-import { sourceType } from "./source-kind"
+import { sourceType, unreadableNote } from "./source-kind"
 import { useNote } from "@/hooks/use-note"
 import { api, type PublicSettings, type Source } from "@/lib/api"
 import { cn } from "@/lib/utils"
@@ -99,10 +99,8 @@ export function PaperView({
               <TabButton active={tab === "summary"} onClick={() => setTab("summary")}>
                 <ListChecksIcon className="size-3.5" /> Summary
               </TabButton>
-              {!source.hasText && (
-                <span className="ml-auto pr-1 text-xs text-muted-foreground">
-                  {isPdf ? "No text found, chat can't read this PDF" : "No text found, chat can't read this"}
-                </span>
+              {unreadableNote(source) && (
+                <span className="ml-auto truncate pr-1 text-xs text-muted-foreground">{unreadableNote(source)}</span>
               )}
             </div>
             {/* Both stay mounted so a reply keeps streaming while you switch to the note. */}

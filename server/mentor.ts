@@ -12,7 +12,7 @@ export function mentorPrompt(opts: {
   project: Project
   noteTitles: string[]
   openNote?: { path: string; content: string }
-  paper?: { title: string; text: string; type?: string }
+  paper?: { title: string; text: string; type?: string; scannedPages?: number[] }
   knowledge?: { index: string; pages: string } | null
   passages?: { all: Source[]; hits: Hit[] }
 }) {
@@ -51,7 +51,7 @@ ${kb.index}
 ${kb.pages ? `\nThe pages most relevant to the latest message:\n${kb.pages}` : ""}`
 }
 
-function paperSection(paper: { title: string; text: string; type?: string }) {
+function paperSection(paper: { title: string; text: string; type?: string; scannedPages?: number[] }) {
   const where =
     paper.type === "youtube"
       ? "a YouTube video's transcript; cite timestamps like (12:30)"
@@ -60,11 +60,14 @@ function paperSection(paper: { title: string; text: string; type?: string }) {
         : "a paper; cite page numbers like (p. 4)"
   const intro = `## The source this chat is about: "${paper.title}"
 The student is reading this source and wants to discuss it. It is ${where}. Answer from its text below. If it doesn't say something, say so rather than guessing. Help them understand and question it; don't write their summary or review of it for them.`
-  if (!paper.text.trim()) {
+  if (!paper.text.replace(/\[page \d+\]/g, "").trim()) {
     return `${intro}\n\nNo text could be extracted from this PDF (it may be a scanned image). Tell the student you can't read it.`
   }
   const cut = paper.text.length > PAPER_CHARS
-  return `${intro}\n\n<paper>\n${paper.text.slice(0, PAPER_CHARS)}\n</paper>${cut ? "\n\n(The paper is long; only the first part is included above. Say so if asked about later sections.)" : ""}`
+  const scans = paper.scannedPages?.length
+    ? `\n\nPages ${paper.scannedPages.join(", ")} are scanned images, so their text is missing below. If asked about them, say you can't read those pages.`
+    : ""
+  return `${intro}${scans}\n\n<paper>\n${paper.text.slice(0, PAPER_CHARS)}\n</paper>${cut ? "\n\n(The paper is long; only the first part is included above. Say so if asked about later sections.)" : ""}`
 }
 
 const PASSAGE_CHARS = 18_000

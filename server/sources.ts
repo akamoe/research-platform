@@ -26,6 +26,10 @@ export interface Source {
   notePath: string
   /** False when the PDF has no text layer (e.g. a scan), so chat can't read it. */
   hasText: boolean
+  /** PDF pages (1-based) that are pictures of text, like scans, so their words can't be read yet. */
+  scannedPages?: number[]
+  /** What read the PDF's text; missing means the older pdf.js reader. */
+  extractor?: "pdf-inspector" | "pdf.js"
   /** False when the student left this paper out of the project chat. Missing means included. */
   inChat?: boolean
 }
@@ -86,6 +90,100 @@ function cleanTitle(s: string) {
   return s.replace(/\.pdf$/i, "").replace(/[_]+/g, " ").replace(/\s+/g, " ").trim()
 }
 
+// ---------- reading a PDF's text ----------
+
+type Inspector = typeof import("@firecrawl/pdf-inspector")
+let inspector: Promise<Inspector | null> | null = null
+/** pdf-inspector is native code; where it has no build (e.g. Intel Macs) Folio uses pdf.js instead. */
+function loadInspector() {
+  // RP_PDF_READER=pdf.js turns pdf-inspector off.
+  if (process.env.RP_PDF_READER === "pdf.js") return Promise.resolve(null)
+  inspector ??= import("@firecrawl/pdf-inspector").then(
+    (m) => m,
+    (err: Error) => {
+      console.warn(`pdf-inspector isn't available here, reading PDFs with pdf.js (${err.message.split("\n")[0]})`)
+      return null
+    },
+  )
+  return inspector
+}
+
+export interface PdfText {
+  pages: number
+  title?: string
+  /** Each page as "[page N]" then its text (markdown from pdf-inspector: headings, paragraphs, tables). */
+  text: string
+  scannedPages: number[]
+  extractor: "pdf-inspector" | "pdf.js"
+}
+
+const usableTitle = (t?: string) => {
+  const s = t?.trim()
+  return s && s.length > 3 && !/^(untitled|microsoft word)/i.test(s) ? s : undefined
+}
+const readable = (text: string) => text.replace(/\[page \d+\]/g, "").trim().length > 50
+
+/**
+ * pdf-inspector first: it is fast, keeps reading order in two-column papers, joins lines into
+ * paragraphs, marks headings and tables, and tells scanned pages apart. pdf.js is the fallback.
+ */
+export async function readPdf(bytes: Uint8Array): Promise<PdfText> {
+  const ins = await loadInspector()
+  if (ins) {
+    try {
+      const buf = Buffer.from(bytes)
+      const info = ins.detectPdf(buf)
+      const res = await ins.extractPagesMarkdownAsync(buf)
+      const text = res.pages.map((p) => `[page ${p.page + 1}]\n${p.markdown.trim()}`).join("\n\n")
+      const scannedPages = [...new Set(res.pagesNeedingOcr)].sort((a, b) => a - b)
+      // A page count of scans explains empty text; otherwise empty text means the reader struggled.
+      if (readable(text) || scannedPages.length >= info.pageCount)
+        return { pages: info.pageCount, title: usableTitle(info.title), text, scannedPages, extractor: "pdf-inspector" }
+    } catch (err) {
+      console.warn("pdf-inspector couldn't read this PDF, trying pdf.js:", (err as Error).message)
+    }
+  }
+  // pdf.js may detach the buffer it's given, so hand it a copy.
+  const pdf = await getDocumentProxy(new Uint8Array(bytes))
+  const meta = await getMeta(pdf).catch(() => null)
+  const res = await extractText(pdf, { mergePages: false })
+  return {
+    pages: pdf.numPages,
+    title: usableTitle((meta?.info as { Title?: string } | undefined)?.Title),
+    text: (res.text as string[]).map((t, i) => `[page ${i + 1}]\n${t.trim()}`).join("\n\n"),
+    scannedPages: [],
+    extractor: "pdf.js",
+  }
+}
+
+/**
+ * PDFs added before pdf-inspector was in Folio: read their text again with it, once.
+ * Only the derived text file changes; the PDF, highlights and notes stay as they are.
+ */
+export async function upgradePdfText(projectId: string) {
+  const ins = await loadInspector()
+  if (!ins) return 0
+  let n = 0
+  for (const src of await listSources(projectId)) {
+    if ((src.type ?? "pdf") !== "pdf" || src.extractor) continue
+    try {
+      const got = await readPdf(new Uint8Array(await fs.readFile(pdfPath(projectId, src.id))))
+      await fs.writeFile(file(projectId, src.id, "txt"), got.text)
+      await saveSource(projectId, {
+        ...src,
+        pages: got.pages || src.pages,
+        hasText: readable(got.text),
+        scannedPages: got.scannedPages,
+        extractor: got.extractor,
+      })
+      n++
+    } catch (err) {
+      console.warn(`Couldn't re-read ${src.title}:`, (err as Error).message)
+    }
+  }
+  return n
+}
+
 export async function addPdf(projectId: string, fileName: string, bytes: Uint8Array): Promise<Source> {
   await getProject(projectId)
   if (bytes.byteLength > MAX_PDF_BYTES) throw new HttpError(413, "PDF is larger than 200 MB")
@@ -96,25 +194,28 @@ export async function addPdf(projectId: string, fileName: string, bytes: Uint8Ar
   await fs.writeFile(pdfPath(projectId, id), bytes)
 
   let title = cleanTitle(fileName) || "Untitled paper"
-  let pages = 0
-  let text = ""
+  let got: PdfText = { pages: 0, text: "", scannedPages: [], extractor: "pdf.js" }
   try {
-    // pdf.js may detach the buffer it's given, so hand it a copy.
-    const pdf = await getDocumentProxy(new Uint8Array(bytes))
-    pages = pdf.numPages
-    const meta = await getMeta(pdf).catch(() => null)
-    const metaTitle = (meta?.info as { Title?: string } | undefined)?.Title?.trim()
-    if (metaTitle && metaTitle.length > 3 && !/^(untitled|microsoft word)/i.test(metaTitle)) title = metaTitle
-    const res = await extractText(pdf, { mergePages: false })
-    text = (res.text as string[]).map((t, i) => `[page ${i + 1}]\n${t.trim()}`).join("\n\n")
+    got = await readPdf(bytes)
+    if (got.title) title = got.title
   } catch (err) {
     console.warn(`Could not read text from ${fileName}:`, (err as Error).message)
   }
-  await fs.writeFile(file(projectId, id, "txt"), text)
-  const hasText = text.replace(/\[page \d+\]/g, "").trim().length > 50
+  await fs.writeFile(file(projectId, id, "txt"), got.text)
 
   const notePath = await readingNote(projectId, title)
-  const source: Source = { id, title, type: "pdf", fileName, addedAt: new Date().toISOString(), pages, notePath, hasText }
+  const source: Source = {
+    id,
+    title,
+    type: "pdf",
+    fileName,
+    addedAt: new Date().toISOString(),
+    pages: got.pages,
+    notePath,
+    hasText: readable(got.text),
+    scannedPages: got.scannedPages,
+    extractor: got.extractor,
+  }
   await saveSource(projectId, source)
   await touchProject(projectId)
   return source

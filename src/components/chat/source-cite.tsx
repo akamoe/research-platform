@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react"
+import Markdown from "react-markdown"
+import remarkGfm from "remark-gfm"
 import { BookOpenIcon, ExternalLinkIcon, LoaderCircleIcon } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -44,13 +46,15 @@ export function SourceCite({ projectId, href, children }: { projectId: string; h
           <p className="truncate text-sm font-medium">{passage?.title ?? "…"}</p>
           {target.page > 0 && <p className="text-xs text-muted-foreground">Page {target.page}</p>}
         </div>
-        <div className="max-h-64 overflow-y-auto px-3 py-2.5 text-sm leading-relaxed text-muted-foreground">
+        <div className="prose prose-sm max-h-64 max-w-none overflow-y-auto px-3 py-2.5 text-sm leading-relaxed text-muted-foreground dark:prose-invert prose-headings:my-1.5 prose-headings:text-sm prose-p:my-1.5 prose-table:my-1.5 prose-table:text-xs">
           {passage === undefined ? (
             <LoaderCircleIcon className="size-4 animate-spin" />
           ) : passage === null ? (
             "This passage isn't there any more. The paper may have been removed."
           ) : (
-            <p className="whitespace-pre-line">{passage.text.replace(/([^\n])\n(?!\n)/g, "$1 ")}</p>
+            <Markdown remarkPlugins={[remarkGfm]} components={{ a: ({ children }) => <>{children}</> }}>
+              {passage.text}
+            </Markdown>
           )}
         </div>
         {passage && (

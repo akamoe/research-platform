@@ -174,9 +174,21 @@ async function buildIndex(projectId: string): Promise<Index> {
   return index
 }
 
+/** Markdown markers (headings, bold, tables, links) taken out, for short excerpts shown as plain text. */
+export function plainText(md: string) {
+  return md
+    .replace(/^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?\s*$/gm, "")
+    .replace(/^\s{0,3}(#{1,6}|>)\s+/gm, "")
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/(\*\*|__)(.+?)\1/g, "$2")
+    .replace(/(^|[^\w*])\*(?!\s)([^*\n]+?)\*(?!\w)/g, "$1$2")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/^[ \t]*\|(.*)\|[ \t]*$/gm, (_, row: string) => row.split("|").map((c) => c.trim()).join(" · "))
+}
+
 /** A short excerpt around the densest cluster of query words, with matches wrapped in «». */
 export function snippet(text: string, queryTerms: string[], size = 240) {
-  const flat = text.replace(/\s+/g, " ")
+  const flat = plainText(text).replace(/\s+/g, " ")
   const words = [...flat.matchAll(/[\p{L}\p{N}]+/gu)]
   const want = new Set(queryTerms)
   const hits = words.filter((m) => want.has(stem(m[0].toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, ""))))

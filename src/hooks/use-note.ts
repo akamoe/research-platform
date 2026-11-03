@@ -63,5 +63,8 @@ export function useNote(projectId: string, path: string) {
   /** Re-read the latest text into `content`, e.g. before switching editor views. */
   const sync = useCallback(() => setContent(latest.current), [])
 
-  return { content, status, save, sync, rename }
+  /** Resolves once every save so far has reached the disk. */
+  const whenSaved = useCallback(() => queue.current, [])
+
+  return { content, status, save, sync, rename, whenSaved }
 }

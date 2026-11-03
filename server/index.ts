@@ -23,6 +23,7 @@ import * as organize from "./organize.ts"
 import * as discover from "./discover.ts"
 import * as thesis from "./thesis.ts"
 import * as matrix from "./matrix.ts"
+import * as feedback from "./feedback.ts"
 import { backgroundModel } from "./ai.ts"
 
 const PORT = Number(process.env.RP_PORT ?? 5174)
@@ -432,6 +433,22 @@ api.post("/projects/:id/canvas/think", async (c) => {
 // ---------- thesis plan and progress ----------
 api.get("/projects/:id/thesis", async (c) => c.json(await thesis.state(c.req.param("id"))))
 api.put("/projects/:id/thesis", async (c) => c.json(await thesis.update(c.req.param("id"), await c.req.json())))
+
+// ---------- writing feedback (points at problems, never rewrites) ----------
+api.post("/projects/:id/feedback", async (c) => {
+  const id = c.req.param("id")
+  const body = z
+    .object({ notePath: z.string().max(600).optional(), latexPath: z.string().max(600).optional(), ai: z.boolean().default(false) })
+    .parse(await c.req.json())
+  let text: string
+  if (body.latexPath) text = feedback.readableLatex(await latex.readFile(id, body.latexPath))
+  else if (body.notePath) text = feedback.readableMarkdown(await projects.readNote(id, body.notePath))
+  else throw new HttpError(400, "Nothing to check")
+  if (!text.trim()) return c.json({ issues: [] })
+  const issues = feedback.rules(text)
+  if (body.ai) issues.unshift(...(await feedback.aiReview(text)))
+  return c.json({ issues })
+})
 
 // ---------- literature review matrix ----------
 api.get("/projects/:id/matrix", async (c) => c.json(await matrix.read(c.req.param("id"))))

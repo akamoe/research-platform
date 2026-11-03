@@ -146,3 +146,14 @@
 
 /* A passage opened from search or a chat citation. */
 .rp-flash { background: color-mix(in oklch, oklch(0.9 0.15 95) 55%, transparent); border-radius: 4px; transition: background 600ms; }
+
+/* Writing feedback: the words each issue is about, marked without touching the text. */
+::highlight(rp-issues) {
+  text-decoration: underline wavy;
+  text-decoration-color: color-mix(in oklch, var(--primary) 55%, transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+::highlight(rp-issue-active) {
+  background-color: color-mix(in oklch, oklch(0.9 0.15 95) 60%, transparent);
+}

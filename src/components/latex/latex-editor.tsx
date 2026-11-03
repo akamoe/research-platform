@@ -43,6 +43,9 @@ export const usesNatbib = (tex: string) => /^[^%\n]*natbib/m.test(tex) || CLASSE
 
 export interface LatexEditorHandle {
   goto: (line: number) => void
+  /** Where some words of prose are in the source, allowing LaTeX commands and line breaks between them. */
+  find: (words: string) => { from: number; to: number } | null
+  select: (from: number, to: number) => void
   insert: (text: string) => void
   focus: () => void
 }
@@ -283,6 +286,21 @@ export const LatexEditor = forwardRef<LatexEditorHandle, Props>(function LatexEd
   }, [problems, docKey])
 
   useImperativeHandle(ref, () => ({
+    find(words) {
+      const v = view.current
+      if (!v) return null
+      const parts = words.trim().split(/\s+/).filter(Boolean).map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+      if (!parts.length) return null
+      const gap = String.raw`(?:\s|~|[{}]|%[^\n]*\n|\\(?:cite\w*|ref|eqref|autoref|cref|label)\*?(?:\[[^\]]*\])*\{[^}]*\}|\\[a-zA-Z]+\*?)+`
+      const m = new RegExp(parts.join(gap), "i").exec(v.state.doc.toString())
+      return m ? { from: m.index, to: m.index + m[0].length } : null
+    },
+    select(from, to) {
+      const v = view.current
+      if (!v) return
+      v.dispatch({ selection: { anchor: from, head: to }, effects: EditorView.scrollIntoView(from, { y: "center" }) })
+      v.focus()
+    },
     goto(lineNo) {
       const v = view.current
       if (!v) return

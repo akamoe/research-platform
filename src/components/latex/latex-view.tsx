@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   AlertTriangleIcon,
   ChevronDownIcon,
@@ -16,6 +16,7 @@ import {
   PlayIcon,
   QuoteIcon,
   ScrollTextIcon,
+  SpellCheckIcon,
   Trash2Icon,
   UploadIcon,
 } from "lucide-react"
@@ -42,6 +43,7 @@ import { navigate } from "@/lib/router"
 import { cn } from "@/lib/utils"
 import { LatexEditor, usesNatbib, type EditorContext, type LatexEditorHandle } from "./latex-editor"
 import { PdfPreview } from "./pdf-preview"
+import { FeedbackPanel, type FeedbackTarget } from "@/components/feedback/feedback-panel"
 
 const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform)
 const MOD = isMac ? "⌘" : "Ctrl+"
@@ -76,6 +78,18 @@ export function LatexView({
   const [rev, setRev] = useState(0)
 
   const editor = useRef<LatexEditorHandle>(null)
+  const [feedback, setFeedback] = useState(false)
+  const feedbackTarget = useMemo<FeedbackTarget>(
+    () => ({
+      mark: (quotes) => new Set(quotes.filter((q) => editor.current?.find(q))),
+      reveal: (q) => {
+        const at = editor.current?.find(q)
+        if (at) editor.current?.select(at.from, at.to)
+      },
+      clear: () => {},
+    }),
+    [],
+  )
   const context = useRef<EditorContext>({ refs: [], files: [] })
   const pending = useRef<{ path: string; text: string } | null>(null)
   const saveTimer = useRef<number | undefined>(undefined)
@@ -310,6 +324,21 @@ export function LatexView({
               <Button
                 variant="ghost"
                 size="icon"
+                className={cn("size-8 text-muted-foreground", feedback && "bg-muted text-foreground")}
+                onClick={() => setFeedback((f) => !f)}
+                disabled={!path.endsWith(".tex")}
+                aria-label="Writing feedback"
+              >
+                <SpellCheckIcon className="size-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Writing feedback on this file</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
                 className={cn("size-8 text-muted-foreground", chatOpen && "bg-muted text-foreground")}
                 onClick={onToggleChat}
                 aria-label="Chat"
@@ -322,53 +351,66 @@ export function LatexView({
         </div>
       </div>
 
-      <ResizablePanelGroup orientation="horizontal" className="min-h-0 flex-1">
-        <ResizablePanel defaultSize="50%" minSize="25%">
-          <div className="flex h-full min-h-0 flex-col">
-            {file?.library && (
-              <div className="flex shrink-0 items-center gap-2 border-b bg-muted/40 px-4 py-1.5 text-xs text-muted-foreground">
-                <LibraryIcon className="size-3.5" />
-                This file is made from your References each time you compile.
-                <button className="underline underline-offset-2 hover:text-foreground" onClick={() => navigate({ name: "project", projectId, view: "references" })}>
-                  Edit them there
-                </button>
-              </div>
-            )}
-            <div className="min-h-0 flex-1">
-              {content !== null && (
-                <LatexEditor
-                  ref={editor}
-                  docKey={`${projectId}/${path}/${rev}`}
-                  initial={content}
-                  readOnly={file?.library}
-                  problems={mine}
-                  context={context}
-                  onChange={onChange}
-                  onRun={compile}
-                />
+      <div className="flex min-h-0 flex-1">
+        <ResizablePanelGroup orientation="horizontal" className="min-h-0 flex-1">
+          <ResizablePanel defaultSize="50%" minSize="25%">
+            <div className="flex h-full min-h-0 flex-col">
+              {file?.library && (
+                <div className="flex shrink-0 items-center gap-2 border-b bg-muted/40 px-4 py-1.5 text-xs text-muted-foreground">
+                  <LibraryIcon className="size-3.5" />
+                  This file is made from your References each time you compile.
+                  <button className="underline underline-offset-2 hover:text-foreground" onClick={() => navigate({ name: "project", projectId, view: "references" })}>
+                    Edit them there
+                  </button>
+                </div>
               )}
+              <div className="min-h-0 flex-1">
+                {content !== null && (
+                  <LatexEditor
+                    ref={editor}
+                    docKey={`${projectId}/${path}/${rev}`}
+                    initial={content}
+                    readOnly={file?.library}
+                    problems={mine}
+                    context={context}
+                    onChange={onChange}
+                    onRun={compile}
+                  />
+                )}
+              </div>
+              {problems.length > 0 && <Problems problems={problems} errors={errors} warnings={warnings} onPick={goto} />}
             </div>
-            {problems.length > 0 && <Problems problems={problems} errors={errors} warnings={warnings} onPick={goto} />}
-          </div>
-        </ResizablePanel>
-        <ResizableHandle />
-        <ResizablePanel defaultSize="50%" minSize="20%">
-          <Preview
-            projectId={projectId}
-            state={state}
-            compiling={compiling}
-            version={pdfVersion}
-            failed={!!result && !result.pdf}
-            onInstall={async () => {
-              try {
-                setState(await api.installLatex(projectId).then(async () => refresh()))
-              } catch (e) {
-                toast.error((e as Error).message)
-              }
-            }}
-          />
-        </ResizablePanel>
-      </ResizablePanelGroup>
+          </ResizablePanel>
+          <ResizableHandle />
+          <ResizablePanel defaultSize="50%" minSize="20%">
+            <Preview
+              projectId={projectId}
+              state={state}
+              compiling={compiling}
+              version={pdfVersion}
+              failed={!!result && !result.pdf}
+              onInstall={async () => {
+                try {
+                  setState(await api.installLatex(projectId).then(async () => refresh()))
+                } catch (e) {
+                  toast.error((e as Error).message)
+                }
+              }}
+            />
+          </ResizablePanel>
+        </ResizablePanelGroup>
+        {feedback && path.endsWith(".tex") && (
+          <aside className="w-80 shrink-0 border-l max-md:absolute max-md:inset-y-0 max-md:right-0 max-md:z-20 max-md:bg-background max-md:shadow-xl">
+            <FeedbackPanel
+              projectId={projectId}
+              file={{ latexPath: path }}
+              target={feedbackTarget}
+              beforeCheck={flush}
+              onClose={() => setFeedback(false)}
+            />
+          </aside>
+        )}
+      </div>
 
       <Dialog open={showLog} onOpenChange={setShowLog}>
         <DialogContent className="sm:max-w-3xl">

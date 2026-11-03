@@ -33,6 +33,7 @@ export function latexProse(tex: string) {
     )
     .replace(/\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\$\$[\s\S]*?\$\$|\$[^$]*\$/g, " ")
     .replace(/\\(cite\w*|ref|eqref|autoref|cref|Cref|label|pageref|includegraphics|input|include|bibliography|bibliographystyle|url|usepackage|documentclass|begin|end|vspace|hspace|setlength|newcommand|renewcommand)\*?(\[[^\]]*\])*(\{[^}]*\})?/g, " ")
+    .replace(/\\([%$#])/g, "$1")
     .replace(/\\[a-zA-Z@]+\*?/g, " ")
     .replace(/\\./g, " ")
     .replace(/[{}[\]&~^_]/g, " ")

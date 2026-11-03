@@ -182,6 +182,14 @@ export interface Reference {
   addedAt?: string
   [field: string]: unknown
 }
+export type FeedbackKind = "clarity" | "structure" | "citation" | "grammar" | "style"
+export interface FeedbackIssue {
+  id: string
+  kind: FeedbackKind
+  quote: string
+  message: string
+  by: "rules" | "ai"
+}
 export interface MatrixCell {
   text: string
   by: "ai" | "student"
@@ -464,6 +472,8 @@ export const api = {
   saveDrawing: (id: string, drawing: { shapes: CanvasShape[]; arrows: CanvasArrow[] }) =>
     request<{ shapes: CanvasShape[]; arrows: CanvasArrow[] }>(`/projects/${id}/canvas/drawing`, json("PUT", drawing)),
   think: (id: string) => request<CanvasData>(`/projects/${id}/canvas/think`, { method: "POST" }),
+  feedback: (id: string, target: { notePath?: string; latexPath?: string }, ai: boolean) =>
+    request<{ issues: FeedbackIssue[] }>(`/projects/${id}/feedback`, json("POST", { ...target, ai })),
   matrix: (id: string) => request<Matrix>(`/projects/${id}/matrix`),
   saveMatrix: (id: string, m: Matrix) => request<Matrix>(`/projects/${id}/matrix`, json("PUT", m)),
   fillMatrix: (id: string, sourceId: string, columns?: string[], overwrite?: boolean) =>

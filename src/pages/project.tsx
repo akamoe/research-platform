@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   ArrowLeftIcon,
   LibraryBigIcon,
@@ -8,6 +8,7 @@ import {
   TelescopeIcon,
   GraduationCapIcon,
   TableIcon,
+  SpellCheckIcon,
   WaypointsIcon,
   CodeIcon,
   MessageSquareIcon,
@@ -55,6 +56,7 @@ import { KnowledgeView } from "@/components/knowledge/knowledge-view"
 import { ReferencesView } from "@/components/references/references-view"
 import { DiscoverView } from "@/components/discover/discover-view"
 import { ThesisView } from "@/components/thesis/thesis-view"
+import { FeedbackPanel, domTarget } from "@/components/feedback/feedback-panel"
 import { MatrixView } from "@/components/matrix/matrix-view"
 import { SearchDialog } from "@/components/search/search-dialog"
 import { LibrarySections } from "@/components/sidebar/library"
@@ -529,8 +531,11 @@ function NotePane({
   onToggleChat: () => void
   onRenamed: (path: string, stay: boolean) => void
 }) {
-  const { content, status, save: saveNote, sync, rename: renameFile } = useNote(projectId, path)
+  const { content, status, save: saveNote, sync, rename: renameFile, whenSaved } = useNote(projectId, path)
   const [source, setSource] = useState(false)
+  const [feedback, setFeedback] = useState(false)
+  const editorBox = useRef<HTMLDivElement>(null)
+  const feedbackTarget = useMemo(() => domTarget(() => editorBox.current?.querySelector<HTMLElement>("[data-slate-editor]") ?? null), [])
   const [title, setTitle] = useState(baseName(path))
   useEffect(() => setTitle(baseName(path)), [path])
 
@@ -623,6 +628,20 @@ function NotePane({
             <Button
               variant="ghost"
               size="icon"
+              className={cn("size-8 text-muted-foreground", feedback && "bg-muted text-foreground")}
+              onClick={() => setFeedback((f) => !f)}
+              aria-label="Writing feedback"
+            >
+              <SpellCheckIcon className="size-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Writing feedback</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
               className={cn("size-8 text-muted-foreground", chatOpen && "bg-muted text-foreground")}
               onClick={onToggleChat}
             >
@@ -632,15 +651,28 @@ function NotePane({
           <TooltipContent>Chat (Ctrl/⌘ J)</TooltipContent>
         </Tooltip>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-[720px] px-8 pt-6 sm:px-12">
-          {content !== null &&
-            (source ? (
-              <SourceEditor key="src" initialMarkdown={content} onChange={save} />
-            ) : (
-              <NoteEditor key="rich" initialMarkdown={content} onChange={save} projectId={projectId} notePath={path} />
-            ))}
+      <div className="flex min-h-0 flex-1">
+        <div ref={editorBox} className="min-h-0 flex-1 overflow-y-auto">
+          <div className="mx-auto max-w-[720px] px-8 pt-6 sm:px-12">
+            {content !== null &&
+              (source ? (
+                <SourceEditor key="src" initialMarkdown={content} onChange={save} />
+              ) : (
+                <NoteEditor key="rich" initialMarkdown={content} onChange={save} projectId={projectId} notePath={path} />
+              ))}
+          </div>
         </div>
+        {feedback && (
+          <aside className="w-80 shrink-0 border-l max-md:absolute max-md:inset-y-0 max-md:right-0 max-md:z-20 max-md:bg-background max-md:shadow-xl">
+            <FeedbackPanel
+              projectId={projectId}
+              file={{ notePath: path }}
+              target={source ? null : feedbackTarget}
+              beforeCheck={whenSaved}
+              onClose={() => setFeedback(false)}
+            />
+          </aside>
+        )}
       </div>
     </>
   )

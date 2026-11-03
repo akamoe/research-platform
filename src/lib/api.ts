@@ -225,6 +225,14 @@ export interface LatexEngineStatus {
   installable: boolean
   install: { done: number; total: number; error: string | null; running: boolean } | null
 }
+export interface LatexTemplate {
+  id: string
+  name: string
+  publisher: string
+  examples: string
+  field: string
+  cls: string
+}
 export interface LatexState extends LatexEngineStatus {
   files: LatexFile[]
   main: string
@@ -332,6 +340,9 @@ export const api = {
     form.append("folder", folder)
     return request<LatexFile[]>(`/projects/${id}/latex/upload`, { method: "POST", body: form })
   },
+  latexTemplates: () => request<LatexTemplate[]>("/latex/templates"),
+  applyLatexTemplate: (id: string, template: string) =>
+    request<{ files: LatexFile[]; kept: string | null }>(`/projects/${id}/latex/template`, json("POST", { id: template })),
   compileLatex: (id: string) => request<LatexResult>(`/projects/${id}/latex/compile`, { method: "POST" }),
   latexPdfUrl: (id: string, version?: number | null, download = false) =>
     `/api/projects/${id}/latex/pdf?v=${version ?? 0}${download ? "&download=1" : ""}`,

@@ -7,7 +7,9 @@ import {
   DownloadIcon,
   FileCodeIcon,
   FilePlusIcon,
+  CheckIcon,
   ImageIcon,
+  LayoutTemplateIcon,
   LibraryIcon,
   LoaderCircleIcon,
   MessageSquareIcon,
@@ -35,10 +37,10 @@ import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/componen
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { refLine } from "@/components/references/cite"
-import { api, type LatexFile, type LatexProblem, type LatexResult, type LatexState, type Reference } from "@/lib/api"
+import { api, type LatexFile, type LatexProblem, type LatexResult, type LatexState, type LatexTemplate, type Reference } from "@/lib/api"
 import { navigate } from "@/lib/router"
 import { cn } from "@/lib/utils"
-import { LatexEditor, type EditorContext, type LatexEditorHandle } from "./latex-editor"
+import { LatexEditor, usesNatbib, type EditorContext, type LatexEditorHandle } from "./latex-editor"
 import { PdfPreview } from "./pdf-preview"
 
 const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform)
@@ -69,6 +71,9 @@ export function LatexView({
   const [auto, setAuto] = useState(() => localStorage.getItem("rp-latex-auto") !== "0")
   const [showLog, setShowLog] = useState(false)
   const [creating, setCreating] = useState(false)
+  const [picking, setPicking] = useState(false)
+  /** Bumped when main.tex is replaced from outside the editor, so the editor reloads it. */
+  const [rev, setRev] = useState(0)
 
   const editor = useRef<LatexEditorHandle>(null)
   const context = useRef<EditorContext>({ refs: [], files: [] })
@@ -81,6 +86,7 @@ export function LatexView({
     setState(s)
     context.current.files = s.files
     if (s.pdf) setPdfVersion((v) => v ?? s.pdf)
+    api.latexFile(projectId, s.main).then((r) => (context.current.natbib = usesNatbib(r.content)), () => {})
     return s
   }, [projectId])
 
@@ -142,6 +148,7 @@ export function LatexView({
 
   const onChange = (text: string) => {
     pending.current = { path, text }
+    if (path === state?.main) context.current.natbib = usesNatbib(text)
     window.clearTimeout(saveTimer.current)
     window.clearTimeout(compileTimer.current)
     saveTimer.current = window.setTimeout(() => {
@@ -248,7 +255,15 @@ export function LatexView({
           onNew={() => setCreating(true)}
           onUpload={upload}
         />
-        <CiteMenu projectId={projectId} onPick={(key) => editor.current?.insert(`\\citep{${key}}`)} />
+        <CiteMenu projectId={projectId} onPick={(key) => editor.current?.insert(`\\${context.current.natbib === false ? "cite" : "citep"}{${key}}`)} />
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button variant="ghost" size="sm" className="h-8 gap-1.5 px-2 font-normal text-muted-foreground" onClick={() => setPicking(true)}>
+              <LayoutTemplateIcon /> Template
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Start from a journal template</TooltipContent>
+        </Tooltip>
         <div className="ml-auto flex items-center gap-1">
           <span className={cn("mr-1 text-xs text-muted-foreground", (errors > 0 || saving === "error") && !compiling && "text-destructive")}>
             {status}
@@ -323,7 +338,7 @@ export function LatexView({
               {content !== null && (
                 <LatexEditor
                   ref={editor}
-                  docKey={`${projectId}/${path}`}
+                  docKey={`${projectId}/${path}/${rev}`}
                   initial={content}
                   readOnly={file?.library}
                   problems={mine}
@@ -368,6 +383,26 @@ export function LatexView({
           </pre>
         </DialogContent>
       </Dialog>
+
+      <TemplateDialog
+        open={picking}
+        onOpenChange={setPicking}
+        onApply={async (t) => {
+          await flush()
+          const r = await api.applyLatexTemplate(projectId, t.id)
+          setResult(null)
+          await refresh()
+          const main = state?.main ?? "main.tex"
+          if (path === main) {
+            setContent((await api.latexFile(projectId, main)).content)
+            setRev((n) => n + 1)
+          } else setPath(main)
+          toast.success(`main.tex now uses the ${t.name} template`, {
+            description: r.kept ? `What you had is kept in ${r.kept}.` : undefined,
+          })
+          if (state?.engine) void compile()
+        }}
+      />
 
       <NewFileDialog
         open={creating}
@@ -719,6 +754,87 @@ function CiteMenu({ projectId, onPick }: { projectId: string; onPick: (key: stri
       </PopoverContent>
     </Popover>
   )
+}
+
+/** Journal templates, grouped by field. Picking one rewrites main.tex; the old text is kept beside it. */
+function TemplateDialog({
+  open,
+  onOpenChange,
+  onApply,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onApply: (t: LatexTemplate) => Promise<void>
+}) {
+  const [list, setList] = useState<LatexTemplate[] | null>(null)
+  const [chosen, setChosen] = useState<LatexTemplate | null>(null)
+  const [busy, setBusy] = useState(false)
+  useEffect(() => {
+    if (open && !list) api.latexTemplates().then(setList, (e) => toast.error(e.message))
+    if (!open) setChosen(null)
+  }, [open, list])
+  const fields = [...new Set((list ?? []).map((t) => t.field))]
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="gap-0 p-0 sm:max-w-xl">
+        <DialogHeader className="p-4 pb-3">
+          <DialogTitle>Journal templates</DialogTitle>
+          <DialogDescription>
+            Each one sets up main.tex the way the journal asks for. Your current main.tex is kept as a separate file.
+          </DialogDescription>
+        </DialogHeader>
+        <Command className="border-t">
+          <CommandInput placeholder="Search journals, publishers or fields" />
+          <CommandList className="max-h-[50vh]">
+            <CommandEmpty>{list ? "No template matches. You can upload a journal's own .cls file from the Files menu." : "Loading…"}</CommandEmpty>
+            {fields.map((field) => (
+              <CommandGroup key={field} heading={field}>
+                {list!
+                  .filter((t) => t.field === field)
+                  .map((t) => (
+                    <CommandItem
+                      key={t.id}
+                      value={`${t.name} ${t.publisher} ${t.examples} ${t.cls} ${t.field}`}
+                      onSelect={() => setChosen(t)}
+                      onDoubleClick={() => void apply(t)}
+                      className="items-start"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm">{t.name}</p>
+                        <p className="line-clamp-2 text-xs text-muted-foreground">
+                          {t.publisher === "Folio" ? t.examples : `${t.publisher} · ${t.examples}`}
+                        </p>
+                      </div>
+                      <CheckIcon className={cn("mt-0.5 size-4", chosen?.id !== t.id && "invisible")} />
+                    </CommandItem>
+                  ))}
+              </CommandGroup>
+            ))}
+          </CommandList>
+        </Command>
+        <DialogFooter className="items-center border-t p-3 sm:justify-between">
+          <p className="text-xs text-muted-foreground">
+            {chosen ? <>Uses the <span className="font-mono">{chosen.cls}</span> class, included with LaTeX.</> : "Journal not here? Upload its .cls file from the Files menu."}
+          </p>
+          <Button size="sm" disabled={!chosen || busy} onClick={() => chosen && void apply(chosen)}>
+            {busy && <LoaderCircleIcon className="animate-spin" />} Use template
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+
+  async function apply(t: LatexTemplate) {
+    setBusy(true)
+    try {
+      await onApply(t)
+      onOpenChange(false)
+    } catch (e) {
+      toast.error((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
 }
 
 function NewFileDialog({

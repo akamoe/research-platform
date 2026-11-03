@@ -341,6 +341,11 @@ api.get("/projects/:id/latex/raw", async (c) => {
     "Content-Type": types[p.split(".").pop()!.toLowerCase()] ?? "application/octet-stream",
   })
 })
+api.get("/latex/templates", (c) => c.json(latex.templates()))
+api.post("/projects/:id/latex/template", async (c) => {
+  const body = z.object({ id: z.string() }).parse(await c.req.json())
+  return c.json(await latex.applyTemplate(c.req.param("id"), body.id))
+})
 api.post("/projects/:id/latex/compile", async (c) => c.json(await latex.compile(c.req.param("id"))))
 api.get("/projects/:id/latex/pdf", async (c) => {
   const id = c.req.param("id")

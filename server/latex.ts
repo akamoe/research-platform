@@ -7,6 +7,7 @@ import { Readable } from "node:stream"
 import { pipeline } from "node:stream/promises"
 import { DATA_DIR, HttpError, safeJoin, writeFileAtomic } from "./paths.ts"
 import { getProject, moveToTrash, projectDir, touchProject } from "./projects.ts"
+import { TEMPLATES, escapeTitle, templateById } from "./latex-templates.ts"
 
 /**
  * The project's LaTeX paper: plain files in `<project>/latex/`, compiled on this computer with
@@ -40,32 +41,7 @@ export interface LatexFile {
   library?: boolean
 }
 
-function template(title: string) {
-  const esc = title.replace(/([&%$#_{}])/g, "\\$1").replace(/~/g, "\\textasciitilde{}").replace(/\^/g, "\\textasciicircum{}")
-  return `\\documentclass[12pt]{article}
-\\usepackage[margin=1in]{geometry}
-\\usepackage{graphicx}
-\\usepackage[authoryear,round]{natbib}
-\\usepackage[hidelinks]{hyperref}
-
-\\title{${esc}}
-\\author{Your name}
-\\date{\\today}
-
-\\begin{document}
-\\maketitle
-
-\\section{Introduction}
-
-
-% Cite with \\citep{key} or \\citet{key}: type \\cite and pick from your References.
-% After your first citation, remove the % from the next two lines to print the reference list.
-% \\bibliographystyle{apalike}
-% \\bibliography{references}
-
-\\end{document}
-`
-}
+const template = (title: string) => TEMPLATES[0].body(escapeTitle(title))
 
 async function ensure(projectId: string) {
   const project = await getProject(projectId)
@@ -135,6 +111,37 @@ export async function deleteFile(projectId: string, rel: string) {
   const full = filePath(projectId, rel)
   if (!(await fs.stat(full).catch(() => null))) throw new HttpError(404, "File not found")
   await moveToTrash(full, `${projectId}-latex-${path.basename(full)}`)
+}
+
+export const templates = () => TEMPLATES.map(({ body: _b, ...t }) => t)
+
+/**
+ * Start main.tex from a journal template. What the student wrote is kept next to it as
+ * main-before-<template>.tex (unless main.tex was still the untouched starter), never overwritten.
+ */
+export async function applyTemplate(projectId: string, id: string) {
+  const t = templateById(id)
+  if (!t) throw new HttpError(404, "No such template")
+  const project = await getProject(projectId)
+  const root = await ensure(projectId)
+  const main = path.join(root, MAIN)
+  const current = await fs.readFile(main, "utf8").catch(() => "")
+  let kept: string | null = null
+  if (current.trim() && current !== template(project.name) && !TEMPLATES.some((x) => x.body(escapeTitle(project.name)) === current)) {
+    for (let n = 1; ; n++) {
+      kept = `main-before-${t.id}${n > 1 ? `-${n}` : ""}.tex`
+      if (!(await fs.stat(path.join(root, kept)).catch(() => null))) break
+    }
+    await fs.writeFile(path.join(root, kept), current)
+  }
+  await writeFileAtomic(main, t.body(escapeTitle(project.name)))
+  // Leftovers from another class (.aux, .bbl) can break the first compile; the PDF stays until replaced.
+  const build = path.join(root, BUILD)
+  for (const f of await fs.readdir(build).catch(() => [] as string[])) {
+    if (f !== MAIN.replace(/\.tex$/, ".pdf")) await fs.rm(path.join(build, f), { recursive: true, force: true })
+  }
+  void touchProject(projectId)
+  return { files: await listFiles(projectId), kept }
 }
 
 export async function binaryFile(projectId: string, rel: string) {
@@ -316,7 +323,12 @@ export function parseProblems(output: string): Problem[] {
     seen.add(k)
     problems.push(p)
   }
-  const lines = output.split(/\r?\n/)
+  // TeX wraps its log at 79 characters; put those lines back together.
+  const lines: string[] = []
+  for (const l of output.split(/\r?\n/)) {
+    if (lines.length && lines[lines.length - 1].length === 79) lines[lines.length - 1] += l
+    else lines.push(l)
+  }
   for (let i = 0; i < lines.length; i++) {
     const l = lines[i]
     // Tectonic: "error: main.tex:12: Undefined control sequence"; file-line-error: "./main.tex:12: ..."
@@ -333,7 +345,11 @@ export function parseProblems(output: string): Problem[] {
       add({ severity: "error", file: null, line: at ? Number(at[1]) : null, message: m[1].replace(/\.$/, "") })
       continue
     }
-    m = /^(?:LaTeX|Package (\w+)) Warning: (.+?)(?: on input line (\d+))?\.?$/.exec(l)
+    // A warning goes on over the next lines ("(natbib)  ...") until a full stop.
+    let w = l
+    for (let j = i + 1; /^(?:LaTeX|Package \w+) Warning: /.test(l) && !/\.$/.test(w) && j < Math.min(lines.length, i + 5) && lines[j].trim(); j++)
+      w += " " + lines[j].replace(/^\(\w+\)\s*/, "").trim()
+    m = /^(?:LaTeX|Package (\w+)) Warning: (.+?)(?: on input line (\d+))?\.?$/.exec(w)
     if (m) {
       add({ severity: "warning", file: null, line: m[3] ? Number(m[3]) : null, message: m[2] })
       continue

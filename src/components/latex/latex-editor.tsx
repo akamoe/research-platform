@@ -33,7 +33,13 @@ import { refLine } from "@/components/references/cite"
 export interface EditorContext {
   refs: Reference[]
   files: LatexFile[]
+  /** Whether main.tex loads natbib, which \citep and \citet need. */
+  natbib?: boolean
 }
+
+const CLASSES_WITH_NATBIB = /\\documentclass(\[[^\]]*\])?\{(acmart|revtex4-[12]|aastex\d*|elsarticle|achemso|oup-authoring-template)\}/
+/** natbib loaded by a package, a class option (mnras usenatbib, apa7 natbib) or a class that always loads it. */
+export const usesNatbib = (tex: string) => /^[^%\n]*natbib/m.test(tex) || CLASSES_WITH_NATBIB.test(tex)
 
 export interface LatexEditorHandle {
   goto: (line: number) => void
@@ -179,11 +185,11 @@ function completions(context: React.RefObject<EditorContext>) {
     const cmd = cx.matchBefore(/\\[a-zA-Z]*/)
     if (cmd && (cmd.from < cmd.to || cx.explicit)) {
       const options: Completion[] = [
-        ...CITES.map((c) => ({
+        ...CITES.filter((c) => context.current?.natbib !== false || !c.startsWith("cite") || c === "cite").map((c) => ({
           label: `\\${c}`,
           detail: c === "citep" ? "(Author, Year)" : c === "citet" ? "Author (Year)" : "cite",
           type: "keyword",
-          boost: c === "citep" || c === "citet" ? 2 : 0,
+          boost: c === "citep" || c === "citet" || (c === "cite" && context.current?.natbib === false) ? 2 : 0,
           apply: (view: EditorView, _c: Completion, from: number, to: number) => {
             view.dispatch({ changes: { from, to, insert: `\\${c}{}` }, selection: { anchor: from + c.length + 2 } })
             reopen(view)

@@ -3,6 +3,7 @@ import {
   ArrowLeftIcon,
   LibraryBigIcon,
   QuoteIcon,
+  SigmaIcon,
   SearchIcon,
   WaypointsIcon,
   UploadIcon,
@@ -47,6 +48,7 @@ import {
 } from "@/components/ui/sidebar"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { ChatPanel } from "@/components/chat/chat-panel"
+import { LatexView } from "@/components/latex/latex-view"
 import { NoteEditor, SourceEditor } from "@/components/editor/note-editor"
 import { ProjectDialog } from "@/components/project-dialog"
 import { PaperView } from "@/components/papers/paper-view"
@@ -85,6 +87,7 @@ export function ProjectPage({ projectId, notePath, paperId, view, kbPage, settin
   const [confirmDelete, setConfirmDelete] = useState<
     null | { kind: "project" } | { kind: "note"; path: string } | { kind: "paper"; id: string }
   >(null)
+  const [latexFile, setLatexFile] = useState<string | null>(null)
   const [chatOpen, setChatOpen] = useState(() => localStorage.getItem("rp-chat-open") === "1")
   const [chatWidth, setChatWidth] = useState(() => clampChat(Number(localStorage.getItem("rp-chat-width")) || CHAT_WIDTH))
   useEffect(() => localStorage.setItem("rp-chat-width", String(Math.round(chatWidth))), [chatWidth])
@@ -290,6 +293,14 @@ export function ProjectPage({ projectId, notePath, paperId, view, kbPage, settin
                     <QuoteIcon /> References
                   </SidebarMenuButton>
                 </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    isActive={view === "latex"}
+                    onClick={() => navigate({ name: "project", projectId, view: "latex" })}
+                  >
+                    <SigmaIcon /> LaTeX
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
@@ -406,6 +417,13 @@ export function ProjectPage({ projectId, notePath, paperId, view, kbPage, settin
                 chatOpen={chatOpen}
                 onToggleChat={() => setChatOpen((o) => !o)}
               />
+            ) : view === "latex" ? (
+              <LatexView
+                projectId={projectId}
+                chatOpen={chatOpen}
+                onToggleChat={() => setChatOpen((o) => !o)}
+                onOpenFile={setLatexFile}
+              />
             ) : view === "knowledge" ? (
               <KnowledgeView
                 projectId={projectId}
@@ -461,7 +479,7 @@ export function ProjectPage({ projectId, notePath, paperId, view, kbPage, settin
               <ChatPanel
                 projectId={projectId}
                 settings={settings}
-                openNotePath={view ? undefined : notePath}
+                openNotePath={view === "latex" ? (latexFile ? `latex/${latexFile}` : undefined) : view ? undefined : notePath}
                 onClose={() => setChatOpen(false)}
                 onOpenSettings={onOpenSettings}
               />

@@ -26,7 +26,7 @@ function slugify(name: string) {
   )
 }
 
-function projectDir(id: string) {
+export function projectDir(id: string) {
   if (!/^[\w-]+$/.test(id)) throw new HttpError(400, "Invalid project id")
   return safeJoin(PROJECTS_DIR, id)
 }
@@ -95,7 +95,7 @@ export async function updateProject(id: string, patch: { name?: string; descript
 }
 
 /** Never hard-delete: move to the trash folder so nothing is lost by a misclick. */
-async function moveToTrash(full: string, label: string) {
+export async function moveToTrash(full: string, label: string) {
   await fs.mkdir(TRASH_DIR, { recursive: true })
   const stamp = new Date().toISOString().replace(/[:.]/g, "-")
   await fs.rename(full, path.join(TRASH_DIR, `${stamp}-${label}`))

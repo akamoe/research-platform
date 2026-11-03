@@ -206,6 +206,45 @@ export interface Chat extends ChatMeta {
   messages: ChatMessage[]
 }
 
+export interface LatexFile {
+  path: string
+  size: number
+  text: boolean
+  /** references.bib, rewritten from References on every compile. */
+  library?: boolean
+}
+export interface LatexEngine {
+  kind: "latexmk" | "tectonic"
+  path: string
+  bundled?: boolean
+}
+export interface LatexEngineStatus {
+  engine: LatexEngine | null
+  installable: boolean
+  install: { done: number; total: number; error: string | null; running: boolean } | null
+}
+export interface LatexState extends LatexEngineStatus {
+  files: LatexFile[]
+  main: string
+  /** When the PDF was last written, or null if there is none yet. */
+  pdf: number | null
+}
+export interface LatexProblem {
+  severity: "error" | "warning"
+  file: string | null
+  line: number | null
+  message: string
+}
+export interface LatexResult {
+  ok: boolean
+  pdf: boolean
+  fresh: boolean
+  problems: LatexProblem[]
+  log: string
+  ms: number
+  engine: LatexEngine["kind"]
+}
+
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`/api${url}`, {
     ...init,
@@ -276,6 +315,26 @@ export const api = {
   passage: (id: string, sid: string, page: number, chunk: number) =>
     request<Passage>(`/projects/${id}/sources/${sid}/passage?page=${page}&chunk=${chunk}`),
   deleteSource: (id: string, sid: string) => request(`/projects/${id}/sources/${sid}`, { method: "DELETE" }),
+  latex: (id: string) => request<LatexState>(`/projects/${id}/latex`),
+  latexFile: (id: string, path: string) =>
+    request<{ content: string }>(`/projects/${id}/latex/file?path=${encodeURIComponent(path)}`),
+  saveLatexFile: (id: string, path: string, content: string) =>
+    request<{ ok: true }>(`/projects/${id}/latex/file?path=${encodeURIComponent(path)}`, json("PUT", { content })),
+  createLatexFile: (id: string, path: string, content = "") =>
+    request<LatexFile[]>(`/projects/${id}/latex/file`, json("POST", { path, content })),
+  deleteLatexFile: (id: string, path: string) =>
+    request<LatexFile[]>(`/projects/${id}/latex/file?path=${encodeURIComponent(path)}`, { method: "DELETE" }),
+  uploadLatexFile: (id: string, file: File, folder = "") => {
+    const form = new FormData()
+    form.append("file", file)
+    form.append("folder", folder)
+    return request<LatexFile[]>(`/projects/${id}/latex/upload`, { method: "POST", body: form })
+  },
+  compileLatex: (id: string) => request<LatexResult>(`/projects/${id}/latex/compile`, { method: "POST" }),
+  latexPdfUrl: (id: string, version?: number | null, download = false) =>
+    `/api/projects/${id}/latex/pdf?v=${version ?? 0}${download ? "&download=1" : ""}`,
+  latexEngine: (id: string) => request<LatexEngineStatus>(`/projects/${id}/latex/engine`),
+  installLatex: (id: string) => request<LatexEngineStatus>(`/projects/${id}/latex/engine/install`, { method: "POST" }),
   pdfUrl: (id: string, sid: string) => `/api/projects/${id}/sources/${sid}/pdf`,
   highlights: (id: string, sid: string) => request<Highlight[]>(`/projects/${id}/sources/${sid}/highlights`),
   addTextHighlight: (id: string, sid: string, h: { pageIndex: number; rects: PdfRect[]; color: HighlightColor; text: string }) =>

@@ -18,6 +18,7 @@ import * as canvas from "./canvas.ts"
 import * as references from "./references.ts"
 import * as search from "./search.ts"
 import * as importers from "./importers.ts"
+import * as latex from "./latex.ts"
 import { backgroundModel } from "./ai.ts"
 
 const PORT = Number(process.env.RP_PORT ?? 5174)
@@ -297,6 +298,69 @@ api.get("/projects/:id/sources/:sid/summary", async (c) => {
 })
 api.post("/projects/:id/knowledge/lint", async (c) => c.json(await knowledge.lint(c.req.param("id"))))
 
+// ---------- LaTeX ----------
+const latexPath = (c: { req: { query: (k: string) => string | undefined } }) => {
+  const p = c.req.query("path")
+  if (!p) throw new HttpError(400, "path is required")
+  return p
+}
+api.get("/projects/:id/latex", async (c) => {
+  const id = c.req.param("id")
+  const [files, engine] = await Promise.all([latex.listFiles(id), latex.engineStatus()])
+  const pdf = await fs.promises.stat(latex.pdfPath(id)).then((s) => s.mtimeMs, () => null)
+  return c.json({ files, main: latex.MAIN, pdf, ...engine })
+})
+api.get("/projects/:id/latex/file", async (c) => c.json({ content: await latex.readFile(c.req.param("id"), latexPath(c)) }))
+api.put("/projects/:id/latex/file", async (c) => {
+  const body = z.object({ content: z.string() }).parse(await c.req.json())
+  await latex.writeFile(c.req.param("id"), latexPath(c), body.content)
+  return c.json({ ok: true })
+})
+api.post("/projects/:id/latex/file", async (c) => {
+  const body = z.object({ path: z.string().min(1), content: z.string().default("") }).parse(await c.req.json())
+  await latex.writeFile(c.req.param("id"), body.path, body.content, { create: true })
+  return c.json(await latex.listFiles(c.req.param("id")))
+})
+api.delete("/projects/:id/latex/file", async (c) => {
+  await latex.deleteFile(c.req.param("id"), latexPath(c))
+  return c.json(await latex.listFiles(c.req.param("id")))
+})
+api.post("/projects/:id/latex/upload", async (c) => {
+  const form = await c.req.parseBody()
+  const file = form.file
+  if (!(file instanceof File)) throw new HttpError(400, "No file uploaded")
+  if (file.size > 50 * 1024 * 1024) throw new HttpError(413, "That file is larger than 50 MB")
+  const folder = typeof form.folder === "string" && form.folder ? `${form.folder.replace(/\/+$/, "")}/` : ""
+  await latex.upload(c.req.param("id"), folder + file.name.replace(/[^\w.-]+/g, "-"), new Uint8Array(await file.arrayBuffer()))
+  return c.json(await latex.listFiles(c.req.param("id")))
+})
+api.get("/projects/:id/latex/raw", async (c) => {
+  const p = latexPath(c)
+  const types: Record<string, string> = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", pdf: "application/pdf" }
+  return c.body(await latex.binaryFile(c.req.param("id"), p), 200, {
+    "Content-Type": types[p.split(".").pop()!.toLowerCase()] ?? "application/octet-stream",
+  })
+})
+api.post("/projects/:id/latex/compile", async (c) => c.json(await latex.compile(c.req.param("id"))))
+api.get("/projects/:id/latex/pdf", async (c) => {
+  const id = c.req.param("id")
+  const project = await projects.getProject(id)
+  const data = await fs.promises.readFile(latex.pdfPath(id)).catch(() => {
+    throw new HttpError(404, "No PDF yet. Compile first.")
+  })
+  const name = `${project.name.replace(/[\\/:*?"<>|]+/g, " ").trim() || "paper"}.pdf`
+  return c.body(data, 200, {
+    "Content-Type": "application/pdf",
+    "Content-Disposition": `${c.req.query("download") ? "attachment" : "inline"}; filename*=UTF-8''${encodeURIComponent(name)}`,
+    "Cache-Control": "no-store",
+  })
+})
+api.get("/projects/:id/latex/engine", async (c) => c.json(await latex.engineStatus()))
+api.post("/projects/:id/latex/engine/install", async (c) => {
+  latex.installTectonic()
+  return c.json(await latex.engineStatus())
+})
+
 // ---------- notes canvas ----------
 api.get("/projects/:id/canvas", async (c) => {
   const id = c.req.param("id")
@@ -432,7 +496,12 @@ api.post("/projects/:id/chat", async (c) => {
   let openNote: { path: string; content: string } | undefined
   if (body.openNotePath) {
     try {
-      openNote = { path: body.openNotePath, content: await projects.readNote(id, body.openNotePath) }
+      // The LaTeX editor sends "latex/<file>"; everything else is a note.
+      const tex = /^latex\/(.+)$/.exec(body.openNotePath)
+      openNote = {
+        path: body.openNotePath,
+        content: tex ? await latex.readFile(id, tex[1]) : await projects.readNote(id, body.openNotePath),
+      }
     } catch {}
   }
   let paper: { title: string; text: string; type?: string } | undefined

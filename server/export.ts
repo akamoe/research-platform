@@ -147,6 +147,10 @@ async function prepare(projectId: string, md: string) {
         if (!a) return m
         return `![${alt}](<${path.join(sources.assetsDir(projectId, a[1]), a[2])}>)`
       })
+      // Figures made from the student's data: their picture on disk.
+      .replace(/(!\[[^\]]*\]\()\/api\/projects\/[\w-]+\/figures\/([\w-]+)\.png(?:\?[^)\s]*)?\)/g, (_, head: string, fid: string) =>
+        `${head}<${path.join(projectDir(projectId), "figures", `${fid}.png`)}>)`,
+      )
       // Reading-note links back to a highlight or a passage: drop them, they mean nothing outside Folio.
       .replace(/\s*\[[^\]]*\]\(#(?:hl|src)\/[^)]*\)/g, "")
       .replace(/\\\[(@[^\]]*)\\\]/g, "[$1]")

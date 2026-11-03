@@ -97,6 +97,28 @@ export interface Highlight {
   image?: string
   createdAt: string
 }
+export type FigureKind = "bar" | "line" | "scatter" | "table" | "summary"
+export interface FigureSpec {
+  id: string
+  title: string
+  caption: string
+  dataset: string
+  kind: FigureKind
+  x: string
+  y: string[]
+  agg: "mean" | "sum" | "count" | "none"
+  xLabel: string
+  yLabel: string
+  table?: string[][]
+  createdAt?: string
+  updatedAt?: string
+  hasImage?: boolean
+}
+export interface Dataset {
+  name: string
+  bytes: number
+  modified: string
+}
 export type ReadingStatus = "to-read" | "reading" | "read"
 export interface ReadingState {
   order: string[]
@@ -610,6 +632,27 @@ export const api = {
     request<{ issues: FeedbackIssue[] }>(`/projects/${id}/feedback`, json("POST", { ...target, ai })),
   similarity: (id: string, target: { notePath?: string; latexPath?: string }) =>
     request<SimilarityReport>(`/projects/${id}/similarity`, json("POST", target)),
+  datasets: (id: string) => request<Dataset[]>(`/projects/${id}/datasets`),
+  uploadDataset: (id: string, file: File) => {
+    const form = new FormData()
+    form.append("file", file)
+    return request<{ name: string }>(`/projects/${id}/datasets`, { method: "POST", body: form })
+  },
+  pasteDataset: (id: string, name: string, text: string) => request<{ name: string }>(`/projects/${id}/datasets`, json("POST", { name, text })),
+  dataset: (id: string, name: string) => request<{ text: string }>(`/projects/${id}/datasets/${encodeURIComponent(name)}`),
+  removeDataset: (id: string, name: string) => request(`/projects/${id}/datasets/${encodeURIComponent(name)}`, { method: "DELETE" }),
+  figures: (id: string) => request<FigureSpec[]>(`/projects/${id}/figures`),
+  saveFigure: (id: string, f: FigureSpec) => request<FigureSpec>(`/projects/${id}/figures/${f.id}`, json("PUT", f)),
+  removeFigure: (id: string, fid: string) => request(`/projects/${id}/figures/${fid}`, { method: "DELETE" }),
+  saveFigureImage: (id: string, fid: string, png: Blob, svg: string) => {
+    const form = new FormData()
+    form.append("png", png, `${fid}.png`)
+    form.append("svg", svg)
+    return request(`/projects/${id}/figures/${fid}/image`, { method: "POST", body: form })
+  },
+  figureUrl: (id: string, fid: string, ext: "png" | "svg" = "png") => `/api/projects/${id}/figures/${fid}.${ext}`,
+  figureToNote: (id: string, fid: string, notePath: string) => request(`/projects/${id}/figures/${fid}/note`, json("POST", { notePath })),
+  figureToLatex: (id: string, fid: string) => request<{ snippet: string; file?: string }>(`/projects/${id}/figures/${fid}/latex`, { method: "POST" }),
   reading: (id: string) => request<ReadingState>(`/projects/${id}/reading`),
   setReading: (id: string, sid: string, status: ReadingStatus | null) =>
     request<ReadingState>(`/projects/${id}/reading/${sid}`, json("PUT", { status })),

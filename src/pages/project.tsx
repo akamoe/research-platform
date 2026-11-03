@@ -12,6 +12,7 @@ import {
   ArchiveIcon,
   GalleryVerticalEndIcon,
   BookOpenCheckIcon,
+  ChartColumnIcon,
   SpellCheckIcon,
   DownloadIcon,
   WaypointsIcon,
@@ -74,6 +75,7 @@ import { MatrixView } from "@/components/matrix/matrix-view"
 import { SupervisorView } from "@/components/supervisor/supervisor-view"
 import { FlashcardsView } from "@/components/flashcards/flashcards-view"
 import { ReadingView } from "@/components/reading/reading-view"
+import { FiguresView } from "@/components/figures/figures-view"
 import { SearchDialog } from "@/components/search/search-dialog"
 import { LibrarySections } from "@/components/sidebar/library"
 import { AddSourceDialog } from "@/components/papers/add-source-dialog"
@@ -352,6 +354,14 @@ export function ProjectPage({ projectId, notePath, paperId, view, kbPage, settin
                 </SidebarMenuItem>
                 <SidebarMenuItem>
                   <SidebarMenuButton
+                    isActive={view === "figures"}
+                    onClick={() => navigate({ name: "project", projectId, view: "figures" })}
+                  >
+                    <ChartColumnIcon /> Figures and tables
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
                     isActive={view === "flashcards"}
                     onClick={() => navigate({ name: "project", projectId, view: "flashcards" })}
                   >
@@ -407,6 +417,8 @@ export function ProjectPage({ projectId, notePath, paperId, view, kbPage, settin
           <div className="flex min-w-0 flex-1 flex-col">
             {view === "canvas" ? (
               <CanvasView projectId={projectId} chatOpen={chatOpen} onToggleChat={() => setChatOpen((o) => !o)} />
+            ) : view === "figures" ? (
+              <FiguresView projectId={projectId} notes={allNotes} chatOpen={chatOpen} onToggleChat={() => setChatOpen((o) => !o)} />
             ) : view === "reading" ? (
               <ReadingView projectId={projectId} papers={papers} chatOpen={chatOpen} onToggleChat={() => setChatOpen((o) => !o)} />
             ) : view === "flashcards" ? (

@@ -31,6 +31,7 @@ import * as similarity from "./similarity.ts"
 import * as backup from "./backup.ts"
 import * as flashcards from "./flashcards.ts"
 import * as reading from "./reading.ts"
+import * as figures from "./figures.ts"
 import * as exporter from "./export.ts"
 import * as supervisor from "./supervisor.ts"
 import { backgroundModel } from "./ai.ts"
@@ -503,6 +504,62 @@ api.get("/projects/:id/supervisor/:rid/file", async (c) => {
     "Content-Disposition": `${r.kind === "pdf" ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(r.fileName)}`,
   })
 })
+
+// ---------- figures and tables from the student's data ----------
+api.get("/projects/:id/datasets", async (c) => c.json(await figures.listDatasets(c.req.param("id"))))
+api.post("/projects/:id/datasets", async (c) => {
+  const id = c.req.param("id")
+  if ((c.req.header("content-type") ?? "").includes("multipart")) {
+    const form = await c.req.parseBody()
+    const file = form.file
+    if (!(file instanceof File)) throw new HttpError(400, "Choose a .csv file")
+    if (!/\.(csv|tsv|txt)$/i.test(file.name)) throw new HttpError(400, "Folio reads .csv and .tsv files. In Excel, use File → Save As → CSV.")
+    return c.json({ name: await figures.addDataset(id, file.name, await file.text()) }, 201)
+  }
+  const body = z.object({ name: z.string().min(1).max(120), text: z.string().min(1) }).parse(await c.req.json())
+  return c.json({ name: await figures.addDataset(id, body.name, body.text) }, 201)
+})
+api.get("/projects/:id/datasets/:name", async (c) =>
+  c.json({ text: await figures.readDataset(c.req.param("id"), decodeURIComponent(c.req.param("name"))) }),
+)
+api.delete("/projects/:id/datasets/:name", async (c) => {
+  await figures.removeDataset(c.req.param("id"), decodeURIComponent(c.req.param("name")))
+  return c.json({ ok: true })
+})
+api.get("/projects/:id/figures", async (c) => c.json(await figures.list(c.req.param("id"))))
+api.put("/projects/:id/figures/:fid", async (c) => {
+  const fig = figures.Figure.parse({ ...(await c.req.json()), id: c.req.param("fid") })
+  return c.json(await figures.save(c.req.param("id"), fig))
+})
+api.delete("/projects/:id/figures/:fid", async (c) => {
+  await figures.remove(c.req.param("id"), c.req.param("fid"))
+  return c.json({ ok: true })
+})
+api.post("/projects/:id/figures/:fid/image", async (c) => {
+  const form = await c.req.parseBody()
+  const png = form.png
+  if (!(png instanceof File)) throw new HttpError(400, "No picture")
+  await figures.saveImage(c.req.param("id"), c.req.param("fid"), new Uint8Array(await png.arrayBuffer()), typeof form.svg === "string" ? form.svg : undefined)
+  return c.json({ ok: true })
+})
+api.get("/projects/:id/figures/:file{[\\w-]+\\.(png|svg)}", async (c) => {
+  const [fid, ext] = c.req.param("file").split(".") as [string, "png" | "svg"]
+  const data = await fs.promises.readFile(figures.imagePath(c.req.param("id"), fid, ext)).catch(() => null)
+  if (!data) throw new HttpError(404, "Not found")
+  return c.body(data, 200, { "Content-Type": ext === "png" ? "image/png" : "image/svg+xml", "Cache-Control": "no-cache" })
+})
+const figureOf = async (c: { req: { param: (k: string) => string } }) => {
+  const f = (await figures.list(c.req.param("id"))).find((x) => x.id === c.req.param("fid"))
+  if (!f) throw new HttpError(404, "Figure not found")
+  return f
+}
+api.post("/projects/:id/figures/:fid/note", async (c) => {
+  const body = z.object({ notePath: z.string().min(1).max(600) }).parse(await c.req.json())
+  await figures.appendToNote(c.req.param("id"), await figureOf(c), body.notePath)
+  return c.json({ ok: true })
+})
+api.post("/projects/:id/figures/:fid/latex", async (c) => c.json(await figures.latexFor(c.req.param("id"), await figureOf(c))))
+api.get("/projects/:id/figures/:fid/markdown", async (c) => c.json({ markdown: figures.markdownFor(c.req.param("id"), await figureOf(c)) }))
 
 // ---------- reading list ----------
 api.get("/projects/:id/reading", async (c) => c.json(await reading.state(c.req.param("id"))))

@@ -8,7 +8,7 @@ nothing here is imported by `src/` or `server/`.
 cd demo-video
 npm ci
 npm run studio   # preview and edit
-npm run render   # writes out/folio-demo.mp4 (1920×1080, 30 fps, ~75 s)
+npm run render   # writes out/folio-demo.mp4 (1920×1080, 30 fps, ~70 s)
 ```
 
 - `src/FolioDemo.tsx`: the storyboard (scenes, feature list and captions).
@@ -19,8 +19,13 @@ npm run render   # writes out/folio-demo.mp4 (1920×1080, 30 fps, ~75 s)
 - `public/screens/`: real Folio screenshots.
 - To update a shot, replace its screenshot in `public/screens/` and adjust its `camera` focal point.
 
+## Look
+
+Vercel-style: white canvas with layout grid lines, Geist Serif headlines, Geist Sans body,
+Geist Mono labels (fonts from the `geist` npm package, SIL Open Font License, in
+`public/fonts`). The ending keeps Folio's paper and oxblood brand.
+
 ## Music
 
-"Daybreak" by Tanner Helland, from https://github.com/tannerhelland/free-music,
-licensed under Creative Commons Attribution 4.0 (see `public/MUSIC-LICENSE.md`).
-The credit is shown on the video's end card; keep it when posting the video.
+"Screen Saver" by Kevin MacLeod, from FreePD.com (public domain, CC0). No credit is
+required; the end card credits it anyway.

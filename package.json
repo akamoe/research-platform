@@ -51,6 +51,7 @@
     "@platejs/list": "^53.3.13",
     "@platejs/markdown": "^53.3.18",
     "@platejs/media": "^53.1.4",
+    "@platejs/table": "^53.0.9",
     "@tailwindcss/typography": "^0.5.20",
     "@tailwindcss/vite": "^4.3.3",
     "@xyflow/react": "^12.12.1",

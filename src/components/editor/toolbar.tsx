@@ -3,6 +3,7 @@ import { KEYS } from "platejs"
 import { useEditorRef, useEditorSelector } from "platejs/react"
 import { toggleList } from "@platejs/list"
 import { upsertLink } from "@platejs/link"
+import { deleteColumn, deleteRow, deleteTable, insertTableColumn, insertTableRow } from "@platejs/table"
 import {
   BoldIcon,
   CheckIcon,
@@ -19,6 +20,7 @@ import {
   ScrollTextIcon,
   Redo2Icon,
   StrikethroughIcon,
+  TableIcon,
   Undo2Icon,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -26,7 +28,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { ExportDialog, refLine } from "@/components/references/cite"
 import { api, type Reference } from "@/lib/api"
 import { navigate } from "@/lib/router"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Separator } from "@/components/ui/separator"
@@ -289,6 +291,44 @@ function CiteButton({ projectId, notePath }: { projectId: string; notePath?: str
 }
 
 /** A slim formatting bar above the note. Markdown shortcuts keep working too. */
+/** Shown while the cursor is in a table: add or remove rows and columns. */
+function TableMenu() {
+  const editor = useEditorRef()
+  const inTable = useEditorSelector((e) => !!e.selection && !!e.api.above({ match: { type: KEYS.table } }), [])
+  if (!inTable) return null
+  const run = (fn: () => void) => () => {
+    editor.tf.focus()
+    fn()
+  }
+  return (
+    <>
+      <Separator orientation="vertical" className="mx-1 !h-5" />
+      <DropdownMenu>
+        <Tip label="Table">
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="sm" className="h-8 gap-1.5 px-2 font-normal" onMouseDown={keepSelection}>
+              <TableIcon /> Table
+              <ChevronDownIcon className="text-muted-foreground" />
+            </Button>
+          </DropdownMenuTrigger>
+        </Tip>
+        <DropdownMenuContent align="start" className="min-w-44" onCloseAutoFocus={(e) => e.preventDefault()}>
+          <DropdownMenuItem onSelect={run(() => insertTableRow(editor, { before: true }))}>Row above</DropdownMenuItem>
+          <DropdownMenuItem onSelect={run(() => insertTableRow(editor))}>Row below</DropdownMenuItem>
+          <DropdownMenuItem onSelect={run(() => insertTableColumn(editor, { before: true }))}>Column left</DropdownMenuItem>
+          <DropdownMenuItem onSelect={run(() => insertTableColumn(editor))}>Column right</DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onSelect={run(() => deleteRow(editor))}>Delete row</DropdownMenuItem>
+          <DropdownMenuItem onSelect={run(() => deleteColumn(editor))}>Delete column</DropdownMenuItem>
+          <DropdownMenuItem variant="destructive" onSelect={run(() => deleteTable(editor))}>
+            Delete table
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </>
+  )
+}
+
 export function EditorToolbar({ className, projectId, notePath }: { className?: string; projectId?: string; notePath?: string }) {
   const editor = useEditorRef()
   const kind = useBlockKind()
@@ -327,6 +367,7 @@ export function EditorToolbar({ className, projectId, notePath }: { className?: 
           <CiteButton projectId={projectId} notePath={notePath} />
         </>
       )}
+      <TableMenu />
       <div className="ml-auto flex items-center gap-0.5 pl-2">
         <Tip label="Undo" keys={`${mod}Z`}>
           <Button variant="ghost" size="icon" className="size-8" aria-label="Undo" onMouseDown={keepSelection} onClick={() => editor.undo()}>

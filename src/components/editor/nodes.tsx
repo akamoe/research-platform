@@ -1,6 +1,7 @@
 import type React from "react"
 import { useRef, useState } from "react"
-import type { TListElement } from "platejs"
+import { NodeApi, type TListElement } from "platejs"
+import { CircleAlertIcon, CircleCheckIcon, CircleHelpIcon, InfoIcon, LightbulbIcon, TriangleAlertIcon } from "lucide-react"
 import { isOrderedList } from "@platejs/list"
 import { useTodoListElement, useTodoListElementState } from "@platejs/list/react"
 import { PlateElement, PlateLeaf, useEditorRef, type PlateElementProps, type PlateLeafProps, type RenderNodeWrapper } from "platejs/react"
@@ -31,11 +32,54 @@ export const H4Element = heading("h4")
 export const H5Element = heading("h5")
 export const H6Element = heading("h6")
 
+/** `> [!note] …` (Obsidian and GitHub write callouts this way). */
+export const CALLOUT_RE = /^\[!(\w+)\][+-]?/
+const CALLOUT_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+  note: InfoIcon,
+  info: InfoIcon,
+  tip: LightbulbIcon,
+  hint: LightbulbIcon,
+  important: CircleAlertIcon,
+  warning: TriangleAlertIcon,
+  caution: TriangleAlertIcon,
+  danger: TriangleAlertIcon,
+  question: CircleHelpIcon,
+  todo: CircleCheckIcon,
+}
+
 export function BlockquoteElement(props: PlateElementProps) {
+  const kind = CALLOUT_RE.exec(NodeApi.string(props.element))?.[1]?.toLowerCase()
+  if (kind) {
+    const Icon = CALLOUT_ICONS[kind] ?? InfoIcon
+    return (
+      <PlateElement
+        as="blockquote"
+        {...props}
+        className={cn(
+          "relative my-3 rounded-md border bg-muted/40 py-2.5 pr-4 pl-11",
+          (kind === "warning" || kind === "caution" || kind === "danger") && "border-destructive/30 bg-destructive/5",
+        )}
+      >
+        <span contentEditable={false} className="absolute top-3.5 left-4 text-muted-foreground select-none">
+          <Icon className="size-4" />
+        </span>
+        {props.children}
+      </PlateElement>
+    )
+  }
   return (
     <PlateElement as="blockquote" {...props} className="my-2 border-l-2 pl-4 italic text-muted-foreground">
       {props.children}
     </PlateElement>
+  )
+}
+
+/** The `[!note]` at the start of a callout, shown small. */
+export function CalloutMarkerLeaf(props: PlateLeafProps) {
+  return (
+    <PlateLeaf {...props} className="font-sans text-xs text-muted-foreground">
+      {props.children}
+    </PlateLeaf>
   )
 }
 
@@ -237,5 +281,33 @@ function TodoMarker(props: PlateElementProps) {
     <div contentEditable={false}>
       <Checkbox className="absolute top-1.5 -left-6" {...checkboxProps} />
     </div>
+  )
+}
+
+/** Markdown (GFM) tables: a plain grid, header row bold. */
+export function TableElement(props: PlateElementProps) {
+  return (
+    <PlateElement {...props} className="my-3 overflow-x-auto">
+      <table className="w-full border-collapse font-sans text-[15px] leading-normal">
+        <tbody>{props.children}</tbody>
+      </table>
+    </PlateElement>
+  )
+}
+export function TableRowElement(props: PlateElementProps) {
+  return <PlateElement as="tr" {...props}>{props.children}</PlateElement>
+}
+export function TableCellElement(props: PlateElementProps) {
+  return (
+    <PlateElement as="td" {...props} className="min-w-20 border px-2.5 py-1.5 align-top [&_p]:py-0">
+      {props.children}
+    </PlateElement>
+  )
+}
+export function TableHeaderCellElement(props: PlateElementProps) {
+  return (
+    <PlateElement as="th" {...props} className="min-w-20 border bg-muted/50 px-2.5 py-1.5 text-left align-top font-semibold [&_p]:py-0">
+      {props.children}
+    </PlateElement>
   )
 }

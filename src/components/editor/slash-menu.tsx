@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react"
 import { KEYS } from "platejs"
 import { useEditorRef, type PlateEditor } from "platejs/react"
 import { toggleList } from "@platejs/list"
+import { insertTable } from "@platejs/table"
 import {
   CodeSquareIcon,
   FileTextIcon,
@@ -14,7 +15,9 @@ import {
   MinusIcon,
   PilcrowIcon,
   QuoteIcon,
+  TableIcon,
   TextQuoteIcon,
+  InfoIcon,
 } from "lucide-react"
 import { api, type Reference } from "@/lib/api"
 import { InlineMenu, useTrigger, type MenuItem, type TriggerAt } from "./inline-menu"
@@ -23,9 +26,12 @@ type Command = MenuItem & { keywords: string; run: (editor: PlateEditor) => void
 
 /** Turn the current block into `type`, taking it out of a list first. */
 const setBlock = (type: string) => (editor: PlateEditor) => {
+  const top = editor.selection?.anchor.path[0]
   const block = editor.api.block({ highest: true })?.[0] as { type?: string; listStyleType?: string } | undefined
   if (block?.listStyleType) toggleList(editor, { listStyleType: block.listStyleType })
   if ((block?.type ?? KEYS.p) !== type) editor.tf.toggleBlock(type)
+  // Wrapping an empty line (quote) can leave the cursor in the line above; keep it here.
+  if (top !== undefined && editor.children[top]) editor.tf.select(editor.api.end([top])!)
 }
 const setList = (type: string) => (editor: PlateEditor) => {
   const block = editor.api.block({ highest: true })?.[0] as { listStyleType?: string } | undefined
@@ -41,6 +47,40 @@ export const COMMANDS: Command[] = [
   { key: "ol", label: "Numbered list", icon: ListOrderedIcon, hint: "1.", keywords: "ordered number", run: setList(KEYS.ol) },
   { key: "todo", label: "Checklist", icon: ListChecksIcon, hint: "[]", keywords: "todo task checkbox", run: setList(KEYS.listTodo) },
   { key: "quote", label: "Quote", icon: TextQuoteIcon, hint: ">", keywords: "blockquote", run: setBlock(KEYS.blockquote) },
+  {
+    key: "callout",
+    label: "Callout",
+    icon: InfoIcon,
+    hint: "> [!note]",
+    keywords: "note tip warning admonition box",
+    run: (editor) => {
+      const top = editor.selection?.anchor.path[0]
+      if (top === undefined) return
+      // Keep the line's words; start the callout with them.
+      const words = editor.api.string([top])
+      editor.tf.withoutNormalizing(() => {
+        editor.tf.removeNodes({ at: [top] })
+        editor.tf.insertNodes(
+          { type: KEYS.blockquote, children: [{ type: KEYS.p, children: [{ text: `[!note] ${words}` }] }] },
+          { at: [top] },
+        )
+      })
+      editor.tf.select(editor.api.end([top])!)
+    },
+  },
+  {
+    key: "table",
+    label: "Table",
+    icon: TableIcon,
+    hint: "| |",
+    keywords: "grid columns rows",
+    run: (editor) => {
+      const top = editor.selection?.anchor.path[0]
+      const empty = top !== undefined && editor.api.string([top]) === "" && !(editor.children[top] as { listStyleType?: string }).listStyleType
+      insertTable(editor, { rowCount: 3, colCount: 3, header: true }, { select: true })
+      if (empty) editor.tf.removeNodes({ at: [top] })
+    },
+  },
   { key: "code", label: "Code block", icon: CodeSquareIcon, hint: "```", keywords: "pre snippet", run: setBlock(KEYS.codeBlock) },
   {
     key: "hr",
@@ -95,7 +135,6 @@ export function SlashMenu({ extra = [] }: { extra?: Command[] }) {
       items={items}
       onPick={(c, at: TriggerAt) => {
         editor.tf.delete({ at: { anchor: { path: at.path, offset: at.start }, focus: { path: at.path, offset: at.offset } } })
-        editor.tf.focus()
         c.run(editor)
       }}
     />
@@ -132,7 +171,6 @@ export function CiteMenu({ projectId }: { projectId: string }) {
         const end = at.offset + (at.after.startsWith("]") ? 1 : 0)
         editor.tf.select({ anchor: { path: at.path, offset: at.start }, focus: { path: at.path, offset: end } })
         editor.tf.insertText(`[@${r.key}]`)
-        editor.tf.focus()
       }}
     />
   )

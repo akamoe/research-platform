@@ -98,7 +98,6 @@ export function NoteLinkMenu() {
         const end = at.offset + (at.after === "]]" ? 2 : 0)
         editor.tf.select({ anchor: { path: at.path, offset: at.start }, focus: { path: at.path, offset: end } })
         editor.tf.insertText(`[[${o.name}]]`)
-        editor.tf.focus()
         if (o.create) links?.create(o.name)
       }}
     />

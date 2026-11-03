@@ -35,6 +35,7 @@ import { CodeBlockRules } from "@platejs/code-block"
 import { CodeBlockPlugin, CodeLinePlugin, CodeSyntaxPlugin } from "@platejs/code-block/react"
 import { MarkdownPlugin, type MdNodeParser } from "@platejs/markdown"
 import { ImagePlugin } from "@platejs/media/react"
+import { TableCellHeaderPlugin, TableCellPlugin, TablePlugin, TableRowPlugin } from "@platejs/table/react"
 import remarkGfm from "remark-gfm"
 import * as N from "./nodes"
 import { WikiLinkPlugin } from "./note-links"
@@ -85,6 +86,9 @@ export const unescapeCitations = (md: string) =>
   md
     .replace(/\\\[(?=[^\]\n]*@[\w:.-]+[^\]\n]*\])/g, "[")
     .replace(/\\\[\\\[(?=[^[\]\n]+\]\])/g, "[[")
+    .replace(/^(>\s*)\\\[!(\w+)\]/gm, "$1[!$2]")
+    // The writer marks empty table cells and quotes with a zero-width space.
+    .replace(/\u200B/g, "")
 
 /** Shows pandoc-style citations ([@key], [@a; @b, p. 4]) as small chips. Decoration only: the markdown is unchanged. */
 export const CITATION_RE = /\[[^\]\n]*@[\w:.-]+[^\]\n]*\]/g
@@ -104,6 +108,20 @@ const CitationPlugin = createPlatePlugin({
     return ranges
   },
 }).withComponent(N.CitationLeaf)
+
+/** Styles a callout's `[!note]` marker. Decoration only. */
+const CalloutMarkerPlugin = createPlatePlugin({
+  key: "calloutMarker",
+  node: { isLeaf: true, isDecoration: true },
+  decorate: ({ editor, entry: [node, path], type }) => {
+    if (!TextApi.isText(node) || path.at(-1) !== 0 || !node.text.startsWith("[!")) return []
+    if (editor.api.node([path[0]])?.[0].type !== KEYS.blockquote) return []
+    if (path.length > 2 && path.at(-2) !== 0) return []
+    const m = N.CALLOUT_RE.exec(node.text)
+    if (!m) return []
+    return [{ anchor: { path, offset: 0 }, focus: { path, offset: m[0].length }, [type]: true } as DecoratedRange]
+  },
+}).withComponent(N.CalloutMarkerLeaf)
 
 /** A highlight or capture copied from a PDF pastes as a quote or figure with its link back. */
 const HighlightPastePlugin = createPlatePlugin({ key: "highlightPaste" }).overrideEditor(
@@ -192,8 +210,14 @@ export const editorPlugins = [
       rules: { img: imageRule },
     },
   }),
+  // After the list and indent plugins, so Tab moves between cells instead of indenting.
+  TablePlugin.configure({ node: { component: N.TableElement }, options: { disableMerge: true } }),
+  TableRowPlugin.withComponent(N.TableRowElement),
+  TableCellPlugin.withComponent(N.TableCellElement),
+  TableCellHeaderPlugin.withComponent(N.TableHeaderCellElement),
   HighlightPastePlugin,
   CitationPlugin,
   WikiLinkPlugin,
+  CalloutMarkerPlugin,
   DragPlugin,
 ]

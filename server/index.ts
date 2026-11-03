@@ -1001,6 +1001,9 @@ api.post("/projects/:id/chat", async (c) => {
   })
 })
 
+// An API path this server doesn't know gets JSON, not the web app's HTML.
+api.all("*", (c) => c.json({ error: "Folio's server doesn't know this request. Restart Folio to load the new version." }, 404))
+
 app.route("/api", api)
 
 // ---------- the web app ----------
@@ -1009,7 +1012,7 @@ if (fs.existsSync(DIST)) {
   app.get("*", (c) => c.html(fs.readFileSync(path.join(DIST, "index.html"), "utf8")))
 }
 
-serve({ fetch: app.fetch, port: PORT, hostname: "127.0.0.1" }, async (info) => {
+const server = serve({ fetch: app.fetch, port: PORT, hostname: "127.0.0.1" }, async (info) => {
   const url = `http://localhost:${info.port}`
   console.log(`\n  Folio running at ${url}`)
   console.log(`  Your files are in ${DATA_DIR}\n`)
@@ -1025,4 +1028,11 @@ serve({ fetch: app.fetch, port: PORT, hostname: "127.0.0.1" }, async (info) => {
     const { default: open } = await import("open")
     open(url).catch(() => {})
   }
+})
+
+server.on("error", (err: NodeJS.ErrnoException) => {
+  if (err.code !== "EADDRINUSE") throw err
+  console.error(`\n  Another Folio (or another app) is already running on port ${PORT}.`)
+  console.error(`  Stop it first: npm run stop, or close the terminal it runs in. Then start Folio again.\n`)
+  process.exit(1)
 })

@@ -502,6 +502,10 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
     } catch {}
     throw new Error(msg)
   }
+  // HTML here means an older Folio server answered (a new page, an old server still running).
+  if (!res.headers.get("content-type")?.includes("json")) {
+    throw new Error("Folio's server is out of date. Quit Folio and start it again.")
+  }
   return res.json()
 }
 

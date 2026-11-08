@@ -1,23 +1,39 @@
 //! Folio for Mac: a window that starts Folio's server and shows it.
 //! The page itself gets no access to the app; links, downloads and updates are handled here.
 
+mod downloads;
+mod links;
 mod port;
 mod server;
 
+use std::sync::atomic::{AtomicU16, Ordering};
 use std::sync::Mutex;
 use std::time::Duration;
 
-use tauri::{AppHandle, Manager, RunEvent, Url, WebviewUrl, WebviewWindowBuilder, WindowEvent};
+use tauri::webview::{DownloadEvent, NewWindowResponse};
+use tauri::{AppHandle, Manager, RunEvent, Url, Webview, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 use tauri_plugin_shell::process::CommandChild;
+use tauri_plugin_window_state::StateFlags;
 
 const FIRST_PORT: u16 = 5174;
 const PORTS: u16 = 5;
+
+/// The port Folio's server answers on, once known (0 before).
+static PORT: AtomicU16 = AtomicU16::new(0);
 
 /// Folio's server, when this app started it. Empty when the app reuses a Folio that was already running.
 struct Server(Mutex<Option<CommandChild>>);
 
 pub fn run() {
     let app = tauri::Builder::default()
+        // Opening Folio again brings back the window that's already there.
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| show_main(app)))
+        // Remember size and place, but not "hidden": closing the window only hides it.
+        .plugin(
+            tauri_plugin_window_state::Builder::default()
+                .with_state_flags(StateFlags::all() & !StateFlags::VISIBLE)
+                .build(),
+        )
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_process::init())
         .manage(Server(Mutex::new(None)))
@@ -28,6 +44,15 @@ pub fn run() {
                 .min_inner_size(900.0, 600.0)
                 // Let Folio's own drop zones receive files dragged from Finder.
                 .disable_drag_drop_handler()
+                .initialization_script(links::EXTERNAL_LINKS_SCRIPT)
+                .on_navigation(|url| links::allows_navigation(url, PORT.load(Ordering::Relaxed)))
+                .on_new_window(|url, _features| {
+                    if links::opens_in_browser(&url) {
+                        let _ = tauri_plugin_opener::open_url(url.as_str(), None::<&str>);
+                    }
+                    NewWindowResponse::Deny
+                })
+                .on_download(save_download)
                 .build()?;
             let handle = app.handle().clone();
             std::thread::spawn(move || boot(&handle));
@@ -69,6 +94,7 @@ fn boot(app: &AppHandle) {
             Err(e) => return show_error(app, &format!("Folio couldn't start: {e}")),
         }
     }
+    PORT.store(port, Ordering::Relaxed);
     if server::wait_ready(port, Duration::from_secs(30)) {
         if let (Some(window), Ok(url)) = (app.get_webview_window("main"), Url::parse(&format!("http://localhost:{port}/"))) {
             let _ = window.navigate(url);
@@ -77,6 +103,27 @@ fn boot(app: &AppHandle) {
         stop_server(app);
         show_error(app, "Folio didn't start within 30 seconds.");
     }
+}
+
+/// Saves downloads (exports, backups, CSVs) to Downloads under a free name, then shows them in Finder.
+fn save_download(webview: Webview, event: DownloadEvent<'_>) -> bool {
+    match event {
+        DownloadEvent::Requested { url, destination } => {
+            let dir = webview.app_handle().path().download_dir().unwrap_or_else(|_| std::env::temp_dir());
+            let name = destination
+                .file_name()
+                .and_then(|n| n.to_str())
+                .map(str::to_owned)
+                .or_else(|| url.path_segments().and_then(|mut s| s.next_back()).map(str::to_owned))
+                .unwrap_or_default();
+            *destination = downloads::unique_path(&dir, &name, |p| p.exists());
+        }
+        DownloadEvent::Finished { path: Some(path), success: true, .. } => {
+            let _ = tauri_plugin_opener::reveal_item_in_dir(path);
+        }
+        _ => {}
+    }
+    true
 }
 
 fn first_port() -> u16 {

@@ -17,10 +17,10 @@ Folio for Mac is the same Folio as a normal app: its own window and Dock icon, w
 - **Your projects**: it uses the same `ResearchPlatform` folder as the browser version, so your projects are already there. If Folio is already running from the old icon or `npm run folio`, the app shows that one.
 - **The old icon**: if the installer made a Folio icon before, delete `Folio.app` from the `Applications` folder in your home folder (not the main Applications folder) so Spotlight shows one Folio.
 - **Closing**: the red button only hides the window, so backups keep running. Quit with **⌘Q**.
-- **Updates**: when it opens, Folio checks for a new version and asks before installing it. **Settings → Updates** shows which version you have.
+- **Updates**: when it opens, Folio checks for a new version and asks before installing it; **Later** is the default. To see which version you have, press **Check for updates** in Settings.
 - **Links and downloads**: links to other sites open in your browser. Exports and backups go to your Downloads folder, and Finder shows them.
-- **LaTeX**: if MacTeX or TeX Live is installed, Folio uses it; otherwise it downloads Tectonic the first time you compile.
-- **If it won't start**: the window says why. The details are in `~/Library/Logs/app.folio.desktop/server.log`.
+- **LaTeX**: if MacTeX or TeX Live is installed, Folio uses it; otherwise it offers to download Tectonic (see **LaTeX** below).
+- **If it won't start**: the window says why and has a **Restart** button. The details are in `~/Library/Logs/app.folio.desktop/server.log`.
 
 ## Where your files live
 

@@ -68,10 +68,10 @@ pub fn start(app: &AppHandle, port: u16, on_stop: impl Fn() + Send + 'static) ->
     Ok(child)
 }
 
-/// Waits until Folio answers on `port`.
-pub fn wait_ready(port: u16, timeout: Duration) -> bool {
+/// Waits until Folio answers on `port`, giving up early once `alive` says the server has ended.
+pub fn wait_ready(port: u16, timeout: Duration, alive: impl Fn() -> bool) -> bool {
     let end = Instant::now() + timeout;
-    while Instant::now() < end {
+    while Instant::now() < end && alive() {
         if probe(port) == PortState::Folio {
             return true;
         }

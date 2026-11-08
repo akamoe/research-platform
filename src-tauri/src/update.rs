@@ -35,8 +35,8 @@ async fn try_update(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
     update.download_and_install(|_, _| {}, || {}).await?;
-    // Stop our server first: a restart may skip the exit event that normally does it.
-    crate::stop_server(app);
+    // Let the page save, then stop our server: a restart may skip the exit event that normally does it.
+    crate::flush_and_stop(app);
     app.restart();
 }
 

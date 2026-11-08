@@ -7,7 +7,9 @@ mod port;
 mod server;
 mod update;
 
-use std::sync::atomic::{AtomicU16, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};
+
+use port::{Choice, PortState};
 use std::sync::Mutex;
 use std::time::Duration;
 
@@ -57,9 +59,16 @@ pub fn run() {
                 })
                 .on_download(save_download)
                 .build()?;
+            #[cfg(target_os = "macos")]
+            app.set_menu(menu_with_safe_quit(app.handle())?)?;
             let handle = app.handle().clone();
             std::thread::spawn(move || boot(&handle));
             Ok(())
+        })
+        .on_menu_event(|app, event| {
+            if event.id() == QUIT_ID {
+                quit(app);
+            }
         })
         .build(tauri::generate_context!())
         .expect("Folio couldn't start");
@@ -74,21 +83,39 @@ pub fn run() {
         }
         #[cfg(target_os = "macos")]
         RunEvent::Reopen { .. } => show_main(app),
+        // Any other way of quitting that asks first: save, then quit.
+        RunEvent::ExitRequested { api, .. } if !QUITTING.load(Ordering::SeqCst) => {
+            api.prevent_exit();
+            quit(app);
+        }
         RunEvent::Exit => stop_server(app),
         _ => {}
     });
 }
 
+/// Set once Folio is quitting or restarting, so a server that stops isn't reported as a crash.
+static QUITTING: AtomicBool = AtomicBool::new(false);
+/// Set when the server this app started has ended (crash, kill or quit).
+static ENDED: AtomicBool = AtomicBool::new(false);
+static UPDATE_OFFERED: AtomicBool = AtomicBool::new(false);
+
 /// Starts (or finds) Folio's server, then shows it in the window.
 fn boot(app: &AppHandle) {
-    let Some((port, reuse)) = port::choose_port(first_port(), PORTS, port::probe) else {
-        return show_error(app, "Ports 5174 to 5178 are all used by other apps. Quit one of them and open Folio again.");
+    let (port, reuse) = match port::choose_port(first_port(), PORTS, port::probe) {
+        Some(Choice::Start(port)) => (port, false),
+        Some(Choice::Reuse(port)) => (port, true),
+        Some(Choice::Wait(port)) => {
+            return show_error(app, &format!("A Folio on port {port} isn't answering. Wait a moment, then press Restart."));
+        }
+        None => return show_error(app, "Ports 5174 to 5178 are all used by other apps. Quit one of them and open Folio again."),
     };
     if !reuse {
+        ENDED.store(false, Ordering::SeqCst);
         let handle = app.clone();
         let on_stop = move || {
+            ENDED.store(true, Ordering::SeqCst);
             // Still stored means nobody asked it to stop: it crashed or was killed.
-            if take_server(&handle).is_some() {
+            if take_server(&handle).is_some() && !QUITTING.load(Ordering::SeqCst) {
                 show_error(&handle, "Folio stopped unexpectedly.");
             }
         };
@@ -98,15 +125,81 @@ fn boot(app: &AppHandle) {
         }
     }
     PORT.store(port, Ordering::Relaxed);
-    if server::wait_ready(port, Duration::from_secs(30)) {
+    let alive = || reuse || !ENDED.load(Ordering::SeqCst);
+    if server::wait_ready(port, Duration::from_secs(30), alive) {
         if let (Some(window), Ok(url)) = (app.get_webview_window("main"), Url::parse(&format!("http://localhost:{port}/"))) {
             let _ = window.navigate(url);
         }
-        tauri::async_runtime::spawn(update::offer_update(app.clone()));
+        if !UPDATE_OFFERED.swap(true, Ordering::SeqCst) {
+            tauri::async_runtime::spawn(update::offer_update(app.clone()));
+        }
+        if reuse {
+            let app = app.clone();
+            std::thread::spawn(move || watch_reused(&app, port));
+        }
+    } else if QUITTING.load(Ordering::SeqCst) {
+    } else if ENDED.load(Ordering::SeqCst) {
+        show_error(app, "Folio stopped unexpectedly.");
     } else {
         stop_server(app);
         show_error(app, "Folio didn't start within 30 seconds.");
     }
+}
+
+/// A Folio this app didn't start can stop at any time (`npm run stop`, or one left behind by a
+/// crash that is about to exit). When nothing listens on its port any more, start our own.
+fn watch_reused(app: &AppHandle, port: u16) {
+    loop {
+        std::thread::sleep(Duration::from_secs(2));
+        if QUITTING.load(Ordering::SeqCst) {
+            return;
+        }
+        if port::probe(port) == PortState::Free {
+            return boot(app);
+        }
+    }
+}
+
+const QUIT_ID: &str = "folio-quit";
+
+/// The standard menu, but ⌘Q is our own item: macOS's built-in Quit ends the app at once,
+/// before the page can save what's still waiting.
+#[cfg(target_os = "macos")]
+fn menu_with_safe_quit(app: &AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
+    use tauri::menu::{Menu, MenuItem, MenuItemKind};
+    let menu = Menu::default(app)?;
+    if let Some(MenuItemKind::Submenu(app_menu)) = menu.items()?.into_iter().next() {
+        if let Some(MenuItemKind::Predefined(builtin_quit)) = app_menu.items()?.into_iter().last() {
+            app_menu.remove(&builtin_quit)?;
+        }
+        app_menu.append(&MenuItem::with_id(app, QUIT_ID, "Quit Folio", true, Some("CmdOrCtrl+Q"))?)?;
+    }
+    Ok(menu)
+}
+
+/// Saves, stops the server we started, then quits. Runs once.
+fn quit(app: &AppHandle) {
+    if QUITTING.load(Ordering::SeqCst) {
+        return;
+    }
+    let app = app.clone();
+    std::thread::spawn(move || {
+        flush_and_stop(&app);
+        app.exit(0);
+    });
+}
+
+/// Lets the page save edits that are still waiting (the same `beforeunload` a closing tab
+/// gets), gives the saves a moment to reach the server, then stops the server we started.
+pub(crate) fn flush_and_stop(app: &AppHandle) {
+    QUITTING.store(true, Ordering::SeqCst);
+    if let Some(window) = app.get_webview_window("main") {
+        if window.url().is_ok_and(|u| u.scheme() == "http") {
+            let _ = window.eval("window.dispatchEvent(new Event('beforeunload'))");
+            std::thread::sleep(Duration::from_millis(1500));
+        }
+    }
+    stop_server(app);
 }
 
 /// Saves downloads (exports, backups, CSVs) to Downloads under a free name, then shows them in Finder.

@@ -79,6 +79,15 @@ export function UpdateSettings() {
 
   const busy = job?.state === "running" || job?.state === "restarting"
   const version = check?.current.sha ? check.current.sha.slice(0, 7) : null
+  // The Mac app updates itself when it opens, so there's nothing to click here.
+  if (check?.kind === "desktop") {
+    return (
+      <div>
+        <Label>Updates</Label>
+        <p className="mt-1 text-xs text-muted-foreground">{check.blocked}</p>
+      </div>
+    )
+  }
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-4">

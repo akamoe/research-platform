@@ -12,6 +12,7 @@
     "stop": "node scripts/launch.mjs --stop",
     "shortcut": "node scripts/shortcut.mjs",
     "typecheck": "tsc -b",
+    "test:desktop": "node --test \"server/*.test.ts\" \"scripts/desktop/*.test.mjs\"",
     "lint": "oxlint"
   },
   "dependencies": {

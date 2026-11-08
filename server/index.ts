@@ -9,6 +9,7 @@ import { serve } from "@hono/node-server"
 import { serveStatic } from "@hono/node-server/serve-static"
 import { z } from "zod"
 import { DATA_DIR, HttpError } from "./paths.ts"
+import { watchParent } from "./parent.ts"
 import * as projects from "./projects.ts"
 import { isProvider, publicSettings, readSettings, writeSettings, type ProviderId } from "./settings.ts"
 import { listModels, streamChat } from "./llm.ts"
@@ -1024,6 +1025,8 @@ const server = serve({ fetch: app.fetch, port: PORT, hostname: "127.0.0.1" }, as
     }
   })()
   backup.schedule()
+  // Started by the Mac app: stop when the app is gone (crash, Force Quit).
+  if (process.env.RP_PARENT_PID) watchParent(Number(process.env.RP_PARENT_PID), () => process.exit(0))
   if (process.argv.includes("--open")) {
     const { default: open } = await import("open")
     open(url).catch(() => {})

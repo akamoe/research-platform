@@ -1,0 +1,58 @@
+# Builds Folio for Mac and puts it in a DRAFT GitHub release with the updater files
+# (Folio.app.tar.gz, its .sig and latest.json). Nothing reaches users until the draft is
+# published by hand on GitHub. See CONTRIBUTING.md → "Releasing the Mac app".
+
+name: Folio for Mac release
+
+on:
+  push:
+    tags: ["desktop-v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  mac:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Check the tag matches the app version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          v=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          if [ "desktop-v$v" != "$GITHUB_REF_NAME" ]; then
+            echo "Tag $GITHUB_REF_NAME doesn't match the app version $v in src-tauri/tauri.conf.json"
+            exit 1
+          fi
+
+      - run: npm ci
+
+      - name: Build the app folder (server, UI, Node)
+        run: node scripts/desktop/prepare.mjs
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: desktop-v__VERSION__
+          releaseName: Folio for Mac __VERSION__
+          releaseBody: "Download the .dmg, open it and drag Folio to Applications. Apple Silicon Macs, macOS 14 or later."
+          releaseDraft: true
+          args: --target aarch64-apple-darwin

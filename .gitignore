@@ -7,3 +7,9 @@ dist
 folio.log
 scripts/.folio-open.sh
 .folio-version
+
+# Mac app build output (scripts/desktop/prepare.mjs, tauri)
+src-tauri/resources/
+src-tauri/binaries/
+src-tauri/target/
+src-tauri/gen/

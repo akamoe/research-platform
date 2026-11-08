@@ -50,6 +50,23 @@ Thanks for helping. Folio is a small project kept deliberately simple, so please
 - Tests or scripts that need the internet should use the `RP_*_URL` overrides and a local mock, like the existing ones.
 - Using an AI coding assistant is fine; you are still responsible for testing what it wrote.
 
+## Folio for Mac
+
+The Mac app is in `src-tauri/` (Tauri 2, Rust). It runs the same server with a Node.js it carries, so app changes are mostly in `server/` and `src/` as usual.
+
+- **Try it**: install Rust (`rustup`), then `npm run desktop:dev`. That builds `src-tauri/resources/app/` and the bundled Node with `scripts/desktop/prepare.mjs`, then opens the app. If your own Folio already uses port 5174, the app shows that one; set `FOLIO_FIRST_PORT=5274` (debug builds only) to have it start its own.
+- **Tests**: `npm run test:desktop` (server and build script) and `cargo test --manifest-path src-tauri/Cargo.toml`.
+- **New server packages** are picked up automatically: `prepare.mjs` bundles exactly what `server/*.ts` imports, and fails if one is missing from `package.json`.
+
+### Releasing the Mac app
+
+1. Raise `version` in `src-tauri/tauri.conf.json` (and `src-tauri/Cargo.toml`).
+2. Merge to `main`, then push a tag `desktop-v<version>` (for example `desktop-v0.1.1`).
+3. The **Folio for Mac release** workflow builds the app and makes a **draft** release with the `.dmg` and the updater files (`Folio.app.tar.gz`, `.sig`, `latest.json`).
+4. Download the `.dmg` from the draft and try it. Then press **Publish**: from that moment every installed Folio for Mac offers the update.
+
+The workflow needs the repository secrets `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` (the updater key; Moe keeps it). Don't lose that key: without it, installed copies can't verify updates and people would have to download the app again. Building locally with `npm run desktop:build` needs the same two variables.
+
 ## What gets merged
 
 Likely: bug fixes; features that help students read, organize, cite, plan or check their own writing; better support for Arabic and other languages; speed and accessibility; clearer wording in the app.

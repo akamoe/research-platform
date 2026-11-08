@@ -8,6 +8,20 @@ How each part of Folio works. To install it, see the [README](../README.en.md).
 
 Folio opens in a browser tab. In Chrome or Edge you can also install it as an app with its own window and Dock or taskbar icon: open Folio, then use the install icon at the right end of the address bar (or the ⋮ menu → **Cast, save and share → Install page as app**). Folio still has to be running, so open it from the Folio icon first.
 
+## Folio for Mac
+
+Folio for Mac is the same Folio as a normal app: its own window and Dock icon, with nothing else to install (it carries its own Node.js). It needs a Mac with Apple Silicon (M1 or newer) and macOS 14 or later.
+
+- **Install**: download the `.dmg` from [Releases](https://github.com/akamoe/research-platform/releases/latest), open it and drag Folio to Applications.
+- **First open**: until the app is signed by Apple, macOS says it can't check it. Close that message, open **System Settings → Privacy & Security**, scroll down and press **Open Anyway** next to Folio. You only do this once.
+- **Your projects**: it uses the same `ResearchPlatform` folder as the browser version, so your projects are already there. If Folio is already running from the old icon or `npm run folio`, the app shows that one.
+- **The old icon**: if the installer made a Folio icon before, delete `Folio.app` from the `Applications` folder in your home folder (not the main Applications folder) so Spotlight shows one Folio.
+- **Closing**: the red button only hides the window, so backups keep running. Quit with **⌘Q**.
+- **Updates**: when it opens, Folio checks for a new version and asks before installing it; **Later** is the default. To see which version you have, press **Check for updates** in Settings.
+- **Links and downloads**: links to other sites open in your browser. Exports and backups go to your Downloads folder, and Finder shows them.
+- **LaTeX**: if MacTeX or TeX Live is installed, Folio uses it; otherwise it offers to download Tectonic (see **LaTeX** below).
+- **If it won't start**: the window says why and has a **Restart** button. The details are in `~/Library/Logs/app.folio.desktop/server.log`.
+
 ## Where your files live
 
 By default everything is in `~/ResearchPlatform` (on Windows `C:\Users\<you>\ResearchPlatform`). Set `RP_DATA_DIR` to use another folder.
@@ -53,7 +67,7 @@ You can also copy this whole folder yourself.
 
 ## Updates
 
-Open **Settings** and press **Check for updates** at the bottom. Folio asks GitHub for the newest version and lists what changed. **Update now** downloads it, installs and builds what changed, restarts Folio and reloads the page, which takes a minute or a few. Your projects aren't touched. If Folio was installed with `git clone`, it runs `git pull` instead; it won't update a copy that is on another branch or has its own commits, so use git there.
+Folio for Mac updates itself when it opens (see [Folio for Mac](#folio-for-mac)). Otherwise, open **Settings** and press **Check for updates** at the bottom. Folio asks GitHub for the newest version and lists what changed. **Update now** downloads it, installs and builds what changed, restarts Folio and reloads the page, which takes a minute or a few. Your projects aren't touched. If Folio was installed with `git clone`, it runs `git pull` instead; it won't update a copy that is on another branch or has its own commits, so use git there.
 
 ## Privacy
 

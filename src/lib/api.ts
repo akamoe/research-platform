@@ -475,7 +475,8 @@ export interface UpdateCommit {
   date: string
 }
 export interface UpdateCheck {
-  kind: "git" | "download"
+  kind: "git" | "download" | "desktop"
+  version?: string
   current: { sha: string | null; date: string | null }
   latest: UpdateCommit | null
   behind: number

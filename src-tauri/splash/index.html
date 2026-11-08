@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Folio</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #fafafa;
+        --fg: #18181b;
+        --muted: #71717a;
+        --border: #e4e4e7;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #09090b;
+          --fg: #fafafa;
+          --muted: #a1a1aa;
+          --border: #27272a;
+        }
+      }
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+        background: var(--bg);
+        color: var(--fg);
+        font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        -webkit-user-select: none;
+        user-select: none;
+      }
+      main {
+        height: 100%;
+        display: grid;
+        place-items: center;
+        text-align: center;
+        padding: 0 24px;
+      }
+      h1 {
+        font-size: 20px;
+        font-weight: 600;
+        margin: 0 0 6px;
+      }
+      p {
+        margin: 0;
+        color: var(--muted);
+        max-width: 420px;
+      }
+      code {
+        font: 12px ui-monospace, Menlo, monospace;
+        -webkit-user-select: text;
+        user-select: text;
+      }
+      button {
+        margin-top: 16px;
+        font: inherit;
+        padding: 6px 14px;
+        border-radius: 6px;
+        border: 1px solid var(--border);
+        background: var(--fg);
+        color: var(--bg);
+        cursor: default;
+      }
+      [hidden] {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div>
+        <h1>Folio</h1>
+        <p id="message">Starting…</p>
+        <p id="log" hidden>Details are in <code id="logpath"></code></p>
+        <button id="restart" hidden>Restart Folio</button>
+      </div>
+    </main>
+    <script>
+      // The app opens this page with ?error=…&log=… when Folio's server couldn't start or stopped.
+      const q = new URLSearchParams(location.search)
+      if (q.has("error")) {
+        document.getElementById("message").textContent = q.get("error")
+        if (q.get("log")) {
+          document.getElementById("logpath").textContent = q.get("log")
+          document.getElementById("log").hidden = false
+        }
+        const restart = document.getElementById("restart")
+        restart.hidden = false
+        restart.onclick = () => window.__TAURI__.core.invoke("plugin:process|restart")
+      }
+    </script>
+  </body>
+</html>

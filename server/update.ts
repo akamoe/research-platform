@@ -28,7 +28,9 @@ export interface Commit {
   date: string
 }
 export interface UpdateCheck {
-  kind: "git" | "download"
+  kind: "git" | "download" | "desktop"
+  /** The Mac app's version (desktop only). */
+  version?: string
   current: { sha: string | null; date: string | null }
   latest: Commit | null
   /** Commits on main that this copy doesn't have, newest first (at most 20). */
@@ -87,6 +89,20 @@ function readStamp(): { sha: string; date: string | null } | null {
 }
 
 export async function check(): Promise<UpdateCheck> {
+  // Inside the Mac app the code lives in the app bundle, which updates itself.
+  if (process.env.RP_DESKTOP === "1") {
+    const version = process.env.RP_DESKTOP_VERSION ?? ""
+    return {
+      kind: "desktop",
+      version,
+      current: { sha: null, date: null },
+      latest: null,
+      behind: 0,
+      commits: [],
+      available: false,
+      blocked: `This is Folio for Mac ${version}. It checks for updates by itself each time it opens.`,
+    }
+  }
   if (isGit()) return checkGit()
   return checkDownload()
 }

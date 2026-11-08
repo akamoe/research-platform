@@ -49,7 +49,9 @@
 
 ما تحتاج تنصّب أي شي قبله.
 
-**ماك**: افتح برنامج **Terminal** (دوره بـ Spotlight)، الصق هذا السطر ودوس Enter:
+**ماك (Apple Silicon)**: الأسهل تنزّل **Folio for Mac** من [صفحة الإصدارات](https://github.com/akamoe/research-platform/releases/latest)، تفتح ملف الـ `.dmg` وتسحب Folio لـ Applications. أول مرة تفتحه شوف [Folio for Mac](docs/GUIDE.ar.md#folio-for-mac).
+
+**أو بالماك من Terminal**: افتح برنامج **Terminal** (دوره بـ Spotlight)، الصق هذا السطر ودوس Enter:
 
 </div>
 

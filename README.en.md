@@ -47,7 +47,9 @@ Not a full replacement, but it covers their job in one place:
 
 Nothing else to install first.
 
-**Mac or Linux**: open **Terminal**, paste this line and press Enter:
+**Mac (Apple Silicon)**: the easiest way is **Folio for Mac**. Download it from [Releases](https://github.com/akamoe/research-platform/releases/latest), open the `.dmg` and drag Folio to Applications. For the first time you open it, see [Folio for Mac](docs/GUIDE.md#folio-for-mac).
+
+**Mac or Linux from Terminal**: open **Terminal**, paste this line and press Enter:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/akamoe/research-platform/main/scripts/install.sh | bash

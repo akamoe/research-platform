@@ -5,6 +5,7 @@ mod downloads;
 mod links;
 mod port;
 mod server;
+mod update;
 
 use std::sync::atomic::{AtomicU16, Ordering};
 use std::sync::Mutex;
@@ -36,6 +37,8 @@ pub fn run() {
         )
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(Server(Mutex::new(None)))
         .setup(|app| {
             WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
@@ -99,6 +102,7 @@ fn boot(app: &AppHandle) {
         if let (Some(window), Ok(url)) = (app.get_webview_window("main"), Url::parse(&format!("http://localhost:{port}/"))) {
             let _ = window.navigate(url);
         }
+        tauri::async_runtime::spawn(update::offer_update(app.clone()));
     } else {
         stop_server(app);
         show_error(app, "Folio didn't start within 30 seconds.");
@@ -157,7 +161,7 @@ fn take_server(app: &AppHandle) -> Option<CommandChild> {
 }
 
 /// Stops the server this app started. A Folio that was already running is left alone.
-fn stop_server(app: &AppHandle) {
+pub(crate) fn stop_server(app: &AppHandle) {
     if let Some(child) = take_server(app) {
         let _ = child.kill();
     }

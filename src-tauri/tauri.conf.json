@@ -15,16 +15,36 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["app", "dmg"],
+    "targets": [
+      "app",
+      "dmg"
+    ],
     "category": "Education",
-    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.png"],
-    "externalBin": ["binaries/node"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.png"
+    ],
+    "externalBin": [
+      "binaries/node"
+    ],
     "resources": {
       "resources/app/": "app/"
     },
     "macOS": {
       "minimumSystemVersion": "14.0",
       "entitlements": "Entitlements.plist"
+    },
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDc1QUJCMDZGMkY5NzI4RUYKUldUdktKY3ZiN0NyZFFPQjl4NmhsdW9GTVg0QXlQMDFuRFpRcUFYY0N3a25oM3poOHVJVHVNdEgK",
+      "endpoints": [
+        "https://github.com/akamoe/research-platform/releases/latest/download/latest.json"
+      ]
     }
   }
 }
